@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-GD2PHJX65F"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-GD2PHJX65F');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VizMix Manual</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header>
+    <h1>VizMix Manual</h1>
+    <p class="tagline">Browser-based VJ Software</p>
+    <p class="version">Version 0.6.0</p>
+    <nav>
+      <a href="#about">About</a>
+      <a href="#install">Installation</a>
+      <a href="#basic">Basic Usage</a>
+      <a href="#keyboard">Keyboard</a>
+      <a href="#bpm">BPM</a>
+      <a href="#effects">Effects</a>
+      <a href="#midi">MIDI</a>
+      <a href="#trouble">Troubleshooting</a>
+      <a href="#license">License</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="about">
+      <h2>About VizMix</h2>
+      <p>VizMix is a browser-based VJ (Visual Jockey) software.</p>
+      <ul>
+        <li>No installation required - runs in your browser</li>
+        <li>2-channel mixing - crossfade between A/B channels</li>
+        <li>16 banks - 8 media slots per channel</li>
+        <li>BPM sync - tap tempo and auto-switching</li>
+        <li>MIDI support - control with hardware controllers</li>
+        <li>GLSL shaders - real-time graphics</li>
+      </ul>
+    </section>
+
+    <section id="install">
+      <h2>Installation</h2>
+
+      <h3>Web Version (Recommended)</h3>
+      <p>Simply access VizMix in your browser. No installation required.</p>
+      <ol>
+        <li>Open Chrome browser</li>
+        <li>Navigate to VizMix URL (Coming soon)</li>
+        <li>Start using immediately</li>
+      </ol>
+      <p class="note">Web version requires no additional software installation.</p>
+
+      <h3>Download Version (Offline/Advanced Users)</h3>
+      <p>To use locally, a simple web server is required.</p>
+
+      <h4>Method 1: Python (Easy)</h4>
+      <ol>
+        <li>Download and extract the ZIP file</li>
+        <li>Open Command Prompt / Terminal</li>
+        <li>Navigate to folder: <code>cd VizMix-v0.6.0</code></li>
+        <li>Start server: <code>python -m http.server 8000</code></li>
+        <li>Open <code>http://localhost:8000</code> in browser</li>
+      </ol>
+
+      <h4>Method 2: Node.js</h4>
+      <ol>
+        <li>Download and extract the ZIP file</li>
+        <li>Open Command Prompt / Terminal</li>
+        <li>Navigate to folder: <code>cd VizMix-v0.6.0</code></li>
+        <li>Start server: <code>npx serve</code></li>
+        <li>Open the displayed URL in browser</li>
+      </ol>
+
+      <h4>Method 3: VS Code Live Server</h4>
+      <ol>
+        <li>Open the extracted folder in VS Code</li>
+        <li>Install "Live Server" extension</li>
+        <li>Right-click index.html → "Open with Live Server"</li>
+      </ol>
+
+      <p class="note">Note: The download version cannot be opened by double-clicking index.html. Due to browser security restrictions, access through a local server is required.</p>
+    </section>
+
+    <section id="basic">
+      <h2>Basic Usage</h2>
+
+      <h3>Screen Layout</h3>
+      <ul>
+        <li><strong>Channel A (Left)</strong> - Video source A + 8 bank buttons</li>
+        <li><strong>Master (Center)</strong> - Crossfader, BPM settings</li>
+        <li><strong>Channel B (Right)</strong> - Video source B + 8 bank buttons</li>
+      </ul>
+
+      <h3>Loading Videos</h3>
+      <ol>
+        <li>Drag and drop video files onto bank buttons</li>
+        <li>A thumbnail appears and the video is loaded</li>
+        <li>Click bank buttons to switch videos</li>
+      </ol>
+      <p class="note">Supported formats: MP4 (H.264), WebM (VP8/VP9). MP4 recommended.</p>
+
+      <h3>Loading Shaders</h3>
+      <ol>
+        <li>Drag and drop shader files (.glsl / .frag / .fs) onto bank buttons</li>
+        <li>Button turns purple when shader is loaded</li>
+      </ol>
+
+      <h3>Crossfade</h3>
+      <p>Use the center slider to mix between Channel A and Channel B.</p>
+      <ul>
+        <li>Left: Channel A 100%</li>
+        <li>Center: 50% / 50%</li>
+        <li>Right: Channel B 100%</li>
+      </ul>
+
+      <h3>Output Window</h3>
+      <p>Click "Open Output" to open the output window. Move it to the monitor connected to your projector or LED and make it fullscreen.</p>
+    </section>
+
+    <section id="keyboard">
+      <h2>Keyboard Shortcuts</h2>
+
+      <table>
+        <tr><th>Key</th><th>Function</th></tr>
+        <tr><td>1 - 8</td><td>Select Channel A bank</td></tr>
+        <tr><td>Q W E R T Y U I</td><td>Select Channel B bank</td></tr>
+        <tr><td>A</td><td>Crossfader left (A 100%)</td></tr>
+        <tr><td>S</td><td>Crossfader center (50/50)</td></tr>
+        <tr><td>D</td><td>Crossfader right (B 100%)</td></tr>
+        <tr><td>← →</td><td>Crossfader fine adjust (±1%)</td></tr>
+        <tr><td>< ></td><td>Crossfader fine adjust (±1%)</td></tr>
+        <tr><td>Shift + ← →</td><td>Crossfader adjust (±5%)</td></tr>
+        <tr><td>Space</td><td>Tap tempo</td></tr>
+        <tr><td>↑ ↓</td><td>BPM ±1</td></tr>
+        <tr><td>Shift + ↑ ↓</td><td>BPM ±5</td></tr>
+        <tr><td>P</td><td>BPM play/pause</td></tr>
+        <tr><td>X</td><td>Auto-switch toggle</td></tr>
+        <tr><td>[ ]</td><td>Change auto-switch interval</td></tr>
+        <tr><td>F1</td><td>Invert ON/OFF</td></tr>
+        <tr><td>F2</td><td>Grayscale ON/OFF</td></tr>
+        <tr><td>F3</td><td>Sepia ON/OFF</td></tr>
+        <tr><td>F4</td><td>Blur Reset</td></tr>
+        <tr><td>F5</td><td>Brightness Reset</td></tr>
+        <tr><td>F6</td><td>Contrast Reset</td></tr>
+        <tr><td>O</td><td>Open Output Window</td></tr>
+        <tr><td>H</td><td>Show help</td></tr>
+        <tr><td>Ctrl+Shift+D</td><td>Debug overlay</td></tr>
+      </table>
+    </section>
+
+    <section id="bpm">
+      <h2>BPM Features</h2>
+
+      <h3>Setting BPM</h3>
+      <ul>
+        <li><strong>Manual input</strong>: Enter value directly (40-200)</li>
+        <li><strong>Tap tempo</strong>: Tap the TAP button or Space key in rhythm</li>
+      </ul>
+
+      <h3>Beat Indicator</h3>
+      <p>Four dots light up in sync with the beat.</p>
+
+      <h3>Auto-Switch</h3>
+      <ol>
+        <li>Enable "Auto Switch" checkbox</li>
+        <li>Select switch interval (1/2/4/8/16 beats)</li>
+        <li>A↔B will switch automatically on the beat</li>
+      </ol>
+    </section>
+
+    <section id="effects">
+      <h2>Effects</h2>
+
+      <h3>VIDEO EFFECTS Panel</h3>
+      <p>Control effects from the VIDEO EFFECTS panel below the bank buttons.</p>
+
+      <h4>How to Use</h4>
+      <ul>
+        <li><strong>Open/Close Panel</strong>: Click header "▼ VIDEO EFFECTS"</li>
+        <li><strong>Select Effect</strong>: Click effect in list → Parameters appear</li>
+        <li><strong>Toggle ON/OFF</strong>: Double-click effect, or use toggle in parameter panel</li>
+        <li><strong>Adjust Parameters</strong>: Drag sliders</li>
+      </ul>
+
+      <h4>Available Effects</h4>
+      <table>
+        <tr>
+          <th>Category</th>
+          <th>Effect</th>
+          <th>Shortcut</th>
+          <th>Description</th>
+        </tr>
+        <tr>
+          <td rowspan="3">Color</td>
+          <td>Invert</td>
+          <td>F1</td>
+          <td>Color inversion (ON/OFF)</td>
+        </tr>
+        <tr>
+          <td>Grayscale</td>
+          <td>F2</td>
+          <td>Grayscale (0-100%)</td>
+        </tr>
+        <tr>
+          <td>Sepia</td>
+          <td>F3</td>
+          <td>Sepia tone (0-100%)</td>
+        </tr>
+        <tr>
+          <td rowspan="2">Adjust</td>
+          <td>Brightness</td>
+          <td>F5</td>
+          <td>Brightness (-100 to 100)</td>
+        </tr>
+        <tr>
+          <td>Contrast</td>
+          <td>F6</td>
+          <td>Contrast (-100 to 100)</td>
+        </tr>
+        <tr>
+          <td>Blur</td>
+          <td>Blur</td>
+          <td>F4</td>
+          <td>Blur (0-100%)</td>
+        </tr>
+      </table>
+
+      <h4>Keyboard Shortcuts</h4>
+      <ul>
+        <li><kbd>F1</kbd>: Invert ON/OFF</li>
+        <li><kbd>F2</kbd>: Grayscale ON/OFF</li>
+        <li><kbd>F3</kbd>: Sepia ON/OFF</li>
+        <li><kbd>F4</kbd>: Reset Blur</li>
+        <li><kbd>F5</kbd>: Reset Brightness</li>
+        <li><kbd>F6</kbd>: Reset Contrast</li>
+      </ul>
+    </section>
+
+    <section id="midi">
+      <h2>MIDI Support</h2>
+
+      <h3>Connection</h3>
+      <ol>
+        <li>Connect your MIDI controller to PC</li>
+        <li>Open VizMix (or refresh the page)</li>
+        <li>Device name appears in top-right when connected</li>
+      </ol>
+      <p class="note">Note: MIDI only works in Chrome/Edge. HTTPS connection required.</p>
+
+      <h3>MIDI Assignments</h3>
+      <table>
+        <tr><th>MIDI</th><th>Function</th></tr>
+        <tr><td>Note 0-7</td><td>Channel A banks 1-8</td></tr>
+        <tr><td>Note 8-15</td><td>Channel B banks 1-8</td></tr>
+        <tr><td>Note 16</td><td>Auto-switch toggle</td></tr>
+        <tr><td>Note 17</td><td>Tap tempo</td></tr>
+        <tr><td>CC 1</td><td>Crossfader (0-127 → 0-100%)</td></tr>
+        <tr><td>CC 2</td><td>BPM (0-127 → 40-200)</td></tr>
+      </table>
+
+      <h3>Testing with Virtual MIDI</h3>
+      <p>If you don't have a MIDI controller, you can test using virtual MIDI software like loopMIDI (Windows).</p>
+    </section>
+
+    <section id="trouble">
+      <h2>Troubleshooting</h2>
+
+      <h3>Video not displaying</h3>
+      <ul>
+        <li>Check video format (MP4/H.264 recommended)</li>
+        <li>Try disabling Chrome hardware acceleration</li>
+        <li>Refresh page (Ctrl+Shift+R)</li>
+      </ul>
+
+      <h3>MIDI not recognized</h3>
+      <ul>
+        <li>Confirm using Chrome/Edge</li>
+        <li>Confirm HTTPS connection (or localhost)</li>
+        <li>Connect MIDI device before refreshing page</li>
+      </ul>
+
+      <h3>Performance issues</h3>
+      <ul>
+        <li>Lower video resolution (1080p recommended)</li>
+        <li>Close other tabs and applications</li>
+        <li>Reduce shader complexity</li>
+      </ul>
+    </section>
+
+    <section id="license">
+      <h2>License</h2>
+
+      <h3>VizMix</h3>
+      <p>© 2024 VizMix. All rights reserved.</p>
+      <ul>
+        <li><strong>Trial Version</strong>: Free for personal use</li>
+        <li><strong>Full Version</strong>: Paid version planned</li>
+      </ul>
+
+      <h3>Third-Party Libraries</h3>
+      <p>VizMix uses the following open-source libraries:</p>
+      <table>
+        <tr><th>Library</th><th>License</th><th>Purpose</th></tr>
+        <tr><td>PlayCanvas Engine</td><td>MIT</td><td>WebGL rendering</td></tr>
+        <tr><td>Vite</td><td>MIT</td><td>Build tool</td></tr>
+      </table>
+      <p>See <a href="../../LICENSE.txt">LICENSE.txt</a> for details.</p>
+
+      <h3>Sample Media</h3>
+      <ul>
+        <li>Personal and commercial use allowed</li>
+        <li>Redistribution and resale prohibited</li>
+        <li>May be used freely in visuals created with VizMix</li>
+      </ul>
+
+      <h3>Output Rights</h3>
+      <p>Any visuals created with VizMix belong to you. Use them freely, including for commercial purposes.</p>
+
+      <h3>Disclaimer</h3>
+      <p>This software is provided "as is". The developer assumes no liability for any damages arising from its use.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p><a href="../../">← Back to VizMix</a></p>
+    <p>VizMix v0.6.0 | <a href="../ja/">日本語</a></p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Google Analytics (GA4) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-GD2PHJX65F"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-GD2PHJX65F');
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VizMix v0.6.0 - Control</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        background: #1a1a1a;
+        color: #fff;
+        font-family: "Segoe UI", sans-serif;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        background: #2a2a2a;
+        padding: 10px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      header h1 {
+        font-size: 18px;
+        font-weight: 500;
+      }
+      .btn {
+        background: #4a4a4a;
+        border: none;
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .btn:hover {
+        background: #5a5a5a;
+      }
+      .btn-primary {
+        background: #0066cc;
+      }
+      .btn-primary:hover {
+        background: #0077ee;
+      }
+      main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+        gap: 20px;
+      }
+      .preview-section {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+      }
+      .channel {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+      .channel-label {
+        font-size: 14px;
+        color: #888;
+      }
+      .preview-box {
+        width: 320px;
+        aspect-ratio: 16 / 9;
+        background: #000;
+        border: 2px solid #333;
+        border-radius: 4px;
+        position: relative;
+        overflow: hidden;
+      }
+      .preview-box.active {
+        border-color: #0066cc;
+      }
+      .preview-box canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .master-preview {
+        width: 400px;
+      }
+      .mixer-section {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 15px;
+      }
+      .crossfader-container {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        width: 100%;
+        max-width: 600px;
+      }
+      .crossfader-label {
+        font-size: 14px;
+        color: #888;
+        width: 30px;
+        text-align: center;
+      }
+      .crossfader {
+        flex: 1;
+        -webkit-appearance: none;
+        height: 8px;
+        background: linear-gradient(to right, #cc6600, #0066cc);
+        border-radius: 4px;
+        outline: none;
+      }
+      .crossfader::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 24px;
+        height: 24px;
+        background: #fff;
+        border-radius: 50%;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      }
+      .bank-section {
+        display: flex;
+        gap: 40px;
+        justify-content: center;
+      }
+      .bank {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .bank-label {
+        font-size: 12px;
+        color: #888;
+        text-align: center;
+      }
+      .bank-buttons {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+      .bank-btn {
+        width: 60px;
+        height: 60px;
+        background: #333;
+        border: 2px solid #444;
+        border-radius: 4px;
+        color: #888;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .bank-btn:hover {
+        background: #444;
+        border-color: #555;
+      }
+      .bank-btn.active {
+        background: #0066cc;
+        border-color: #0088ff;
+        color: #fff;
+      }
+      .bank-btn.bank-a.active {
+        background: #cc6600;
+        border-color: #ff8800;
+      }
+      .fps-toggle {
+        color: #888;
+        font-size: 12px;
+        margin-right: 20px;
+      }
+      .fps-toggle input {
+        margin-right: 4px;
+      }
+      #fpsDisplay {
+        position: fixed;
+        top: 50px;
+        right: 10px;
+        color: #0f0;
+        font-family: monospace;
+        font-size: 14px;
+        background: rgba(0,0,0,0.7);
+        padding: 4px 8px;
+        border-radius: 4px;
+        z-index: 9999;
+        display: none;
+      }
+      #fpsDisplay.visible {
+        display: block;
+      }
+      .bank-btn.dragover {
+        border: 2px dashed #fff;
+        background: rgba(255, 255, 255, 0.2);
+      }
+      .bank-btn.custom {
+        background: linear-gradient(135deg, #2a5a3a, #1a3a2a);
+      }
+      .bank-btn.shader {
+        background: linear-gradient(135deg, #5a2a5a, #3a1a3a);
+      }
+      .shader-indicator {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        background: linear-gradient(135deg, #1a0a2e 0%, #2d1b4e 50%, #1a0a2e 100%);
+        color: #a855f7;
+        font-size: 18px;
+        font-weight: bold;
+        letter-spacing: 2px;
+        text-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
+      }
+      .shader-indicator.visible {
+        display: flex;
+      }
+      .preview-box.shader-mode video {
+        display: none !important;
+      }
+      .preview-box.video-mode .shader-indicator {
+        display: none !important;
+      }
+      /* BPM Section Styles */
+      .bpm-section {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 30px;
+        padding: 15px 0;
+        background: #252525;
+        border-radius: 8px;
+        margin-bottom: 10px;
+      }
+      .bpm-display {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .bpm-value {
+        font-size: 32px;
+        font-weight: bold;
+        font-family: monospace;
+        color: #0f0;
+        min-width: 80px;
+        text-align: center;
+      }
+      .bpm-label {
+        font-size: 12px;
+        color: #888;
+      }
+      .bpm-input {
+        width: 80px;
+        padding: 8px;
+        font-size: 18px;
+        font-family: monospace;
+        background: #333;
+        border: 1px solid #555;
+        border-radius: 4px;
+        color: #fff;
+        text-align: center;
+      }
+      .bpm-input:focus {
+        outline: none;
+        border-color: #0f0;
+      }
+      .tap-btn {
+        background: #0066cc;
+        border: none;
+        color: #fff;
+        padding: 15px 30px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.1s;
+      }
+      .tap-btn:hover {
+        background: #0077ee;
+      }
+      .tap-btn:active {
+        background: #0055aa;
+        transform: scale(0.95);
+      }
+      .beat-indicators {
+        display: flex;
+        gap: 8px;
+      }
+      .beat-dot {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #333;
+        border: 2px solid #555;
+        transition: all 0.05s;
+      }
+      .beat-dot.active {
+        background: #0f0;
+        border-color: #0f0;
+        box-shadow: 0 0 10px #0f0;
+      }
+      .auto-switch-section {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+      }
+      .auto-switch-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+      }
+      .auto-switch-toggle input {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+      }
+      .auto-switch-toggle label {
+        font-size: 14px;
+        color: #ccc;
+        cursor: pointer;
+      }
+      .interval-select {
+        background: #333;
+        border: 1px solid #555;
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      .interval-select:focus {
+        outline: none;
+        border-color: #0066cc;
+      }
+      .play-pause-btn {
+        background: #333;
+        border: 2px solid #555;
+        color: #fff;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .play-pause-btn:hover {
+        background: #444;
+        border-color: #666;
+      }
+      .play-pause-btn.playing {
+        border-color: #0f0;
+        color: #0f0;
+      }
+      /* Thumbnail styles */
+      .bank-btn {
+        position: relative;
+        background-size: cover;
+        background-position: center;
+      }
+      .bank-btn .bank-number {
+        position: absolute;
+        bottom: 4px;
+        right: 4px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      .bank-btn.has-thumbnail {
+        color: transparent;
+      }
+      .bank-btn.has-thumbnail .bank-number,
+      .bank-btn:hover .bank-number {
+        opacity: 1;
+      }
+      /* Reset button */
+      .btn-danger {
+        background: #666;
+        font-size: 12px;
+        padding: 6px 12px;
+        margin-right: 10px;
+      }
+      .btn-danger:hover {
+        background: #c44;
+      }
+      /* Keyboard help modal */
+      .keyboard-help-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+      }
+      .keyboard-help-content {
+        background: #2a2a2a;
+        border: 1px solid #444;
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 420px;
+        position: relative;
+      }
+      .keyboard-help-content .close-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 28px;
+        height: 28px;
+        background: #444;
+        border: none;
+        border-radius: 50%;
+        color: #fff;
+        cursor: pointer;
+        font-size: 16px;
+      }
+      .keyboard-help-content .close-btn:hover {
+        background: #666;
+      }
+      .keyboard-help-content pre {
+        font-family: monospace;
+        font-size: 12px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        color: #ccc;
+      }
+      /* MIDI styles */
+      .midi-section {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: #888;
+        margin-right: 15px;
+      }
+      .midi-device {
+        padding: 2px 8px;
+        background: #8b5cf6;
+        color: white;
+        border-radius: 4px;
+        font-size: 11px;
+      }
+      .no-devices {
+        color: #666;
+        font-style: italic;
+      }
+      .midi-indicator {
+        position: fixed;
+        top: 50px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(139, 92, 246, 0.9);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-family: monospace;
+        opacity: 0;
+        transition: opacity 0.2s;
+        pointer-events: none;
+        z-index: 1000;
+      }
+      .midi-indicator.visible {
+        opacity: 1;
+      }
+      /* Tagline */
+      .tagline {
+        font-size: 11px;
+        color: #888;
+        margin: -6px 0 0 0;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+      /* Manual link */
+      .manual-link {
+        font-size: 20px;
+        text-decoration: none;
+        padding: 4px 8px;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+        margin-right: 10px;
+      }
+      .manual-link:hover {
+        opacity: 1;
+      }
+      /* Shader file name tooltip on hover */
+      .bank-btn[data-name]:hover::after {
+        content: attr(data-name);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        white-space: nowrap;
+        z-index: 100;
+        margin-bottom: 4px;
+      }
+      /* ===== Effects Panel (Resolume-style) ===== */
+      .effects-panel {
+        background: #1a1a1a;
+        border-radius: 8px;
+        margin-top: 15px;
+        overflow: hidden;
+        border: 1px solid #333;
+      }
+      .effects-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 15px;
+        background: #252525;
+        cursor: pointer;
+        color: #4fd1c5;
+        font-weight: bold;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        user-select: none;
+        transition: background 0.15s;
+      }
+      .effects-header:hover {
+        background: #2d2d2d;
+      }
+      .effects-toggle {
+        font-size: 10px;
+        transition: transform 0.2s ease;
+      }
+      .effects-panel.collapsed .effects-toggle {
+        transform: rotate(-90deg);
+      }
+      .effects-panel.collapsed .effects-content {
+        display: none;
+      }
+      .effects-content {
+        display: flex;
+        flex-direction: column;
+      }
+      .effects-list {
+        padding: 8px;
+        max-height: 220px;
+        overflow-y: auto;
+      }
+      .effects-list::-webkit-scrollbar {
+        width: 6px;
+      }
+      .effects-list::-webkit-scrollbar-track {
+        background: #1a1a1a;
+      }
+      .effects-list::-webkit-scrollbar-thumb {
+        background: #444;
+        border-radius: 3px;
+      }
+      .effects-list::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
+      .effect-category {
+        color: #666;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 10px 8px 6px;
+        border-bottom: 1px solid #2a2a2a;
+        margin-bottom: 4px;
+      }
+      .effect-category:first-child {
+        padding-top: 4px;
+      }
+      .effects-panel .effect-item {
+        display: flex;
+        align-items: center;
+        padding: 8px 10px;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background 0.1s;
+        margin-bottom: 2px;
+      }
+      .effects-panel .effect-item:hover {
+        background: #2a2a2a;
+      }
+      .effects-panel .effect-item.active {
+        background: #333;
+        border-left: 2px solid #4fd1c5;
+        padding-left: 8px;
+      }
+      .effect-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #3a3a3a;
+        margin-right: 12px;
+        transition: background 0.15s, box-shadow 0.15s;
+        flex-shrink: 0;
+      }
+      .effects-panel .effect-item.enabled .effect-indicator {
+        background: #4fd1c5;
+        box-shadow: 0 0 6px rgba(79, 209, 197, 0.5);
+      }
+      .effect-name {
+        flex: 1;
+        font-size: 13px;
+        color: #ddd;
+      }
+      .effects-panel .effect-item.enabled .effect-name {
+        color: #fff;
+      }
+      .effect-shortcut {
+        color: #555;
+        font-size: 10px;
+        font-family: monospace;
+        background: #2a2a2a;
+        padding: 2px 6px;
+        border-radius: 3px;
+      }
+      /* Parameter Panel */
+      .effect-params {
+        border-top: 1px solid #333;
+        padding: 15px;
+        background: #1e1e1e;
+      }
+      .effect-params.hidden {
+        display: none;
+      }
+      .param-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #333;
+      }
+      .param-title {
+        color: #4fd1c5;
+        font-weight: bold;
+        font-size: 14px;
+      }
+      .param-close {
+        background: none;
+        border: none;
+        color: #666;
+        cursor: pointer;
+        font-size: 18px;
+        padding: 0 5px;
+        transition: color 0.15s;
+      }
+      .param-close:hover {
+        color: #fff;
+      }
+      .param-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      .param-label {
+        width: 70px;
+        font-size: 12px;
+        color: #999;
+        flex-shrink: 0;
+      }
+      .param-slider {
+        flex: 1;
+        height: 4px;
+        margin: 0 12px;
+        -webkit-appearance: none;
+        appearance: none;
+        background: #333;
+        border-radius: 2px;
+        outline: none;
+      }
+      .param-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #4fd1c5;
+        cursor: pointer;
+        transition: transform 0.1s;
+      }
+      .param-slider::-webkit-slider-thumb:hover {
+        transform: scale(1.2);
+      }
+      .param-slider::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #4fd1c5;
+        cursor: pointer;
+        border: none;
+      }
+      .param-value {
+        width: 50px;
+        text-align: right;
+        font-size: 12px;
+        color: #fff;
+        font-family: monospace;
+        flex-shrink: 0;
+      }
+      .param-shortcut {
+        margin-top: 15px;
+        padding-top: 10px;
+        border-top: 1px solid #2a2a2a;
+        font-size: 11px;
+        color: #666;
+      }
+      .param-shortcut kbd {
+        background: #333;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-family: monospace;
+        color: #4fd1c5;
+        margin-left: 5px;
+      }
+      /* Toggle Switch */
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 20px;
+        margin-left: 12px;
+      }
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #333;
+        transition: 0.2s;
+        border-radius: 20px;
+      }
+      .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 3px;
+        bottom: 3px;
+        background-color: #666;
+        transition: 0.2s;
+        border-radius: 50%;
+      }
+      .toggle-switch input:checked + .toggle-slider {
+        background-color: rgba(79, 209, 197, 0.3);
+      }
+      .toggle-switch input:checked + .toggle-slider:before {
+        transform: translateX(20px);
+        background-color: #4fd1c5;
+      }
+      /* Channel Controller */
+      .channel-controller {
+        width: 320px;
+        background: #252525;
+        border-radius: 6px;
+        padding: 10px;
+        margin-top: 8px;
+      }
+      .controller-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .controller-row:not(:last-child) {
+        margin-bottom: 8px;
+      }
+      .ctrl-btn {
+        width: 36px;
+        height: 28px;
+        background: #333;
+        border: 1px solid #444;
+        border-radius: 4px;
+        color: #888;
+        cursor: pointer;
+        font-size: 12px;
+        transition: all 0.15s;
+      }
+      .ctrl-btn:hover {
+        background: #444;
+        color: #fff;
+      }
+      .ctrl-btn.active {
+        background: #0066cc;
+        border-color: #0088ff;
+        color: #fff;
+      }
+      .ctrl-btn.reverse-btn.active {
+        background: #cc6600;
+        border-color: #ff8800;
+      }
+      .ctrl-label {
+        font-size: 11px;
+        color: #888;
+        width: 40px;
+      }
+      .speed-slider {
+        flex: 1;
+        height: 4px;
+        -webkit-appearance: none;
+        background: #444;
+        border-radius: 2px;
+        outline: none;
+      }
+      .speed-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 14px;
+        height: 14px;
+        background: #4fd1c5;
+        border-radius: 50%;
+        cursor: pointer;
+      }
+      .speed-value {
+        font-size: 11px;
+        color: #fff;
+        font-family: monospace;
+        width: 40px;
+        text-align: right;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>VizMix <span style="font-size: 14px; font-weight: normal; color: #888;">v0.6.0</span></h1>
+        <p class="tagline">Browser-based VJ Software</p>
+      </div>
+      <div style="display: flex; align-items: center;">
+        <div class="midi-section">
+          <span>MIDI:</span>
+          <div id="midiDevices"><span class="no-devices">Checking...</span></div>
+        </div>
+        <label class="fps-toggle">
+          <input type="checkbox" id="showFps"> FPS
+        </label>
+        <button class="btn btn-danger" id="clearSettings" title="Reset all settings">Reset</button>
+        <a href="manual/" target="_blank" class="manual-link" title="Manual">📖</a>
+        <button class="btn btn-primary" id="openOutput">Output Window</button>
+      </div>
+    </header>
+    <main>
+      <div class="preview-section">
+        <div class="channel">
+          <span class="channel-label">Channel A</span>
+          <div class="preview-box active" id="previewA">
+            <canvas id="canvasA"></canvas>
+            <div class="shader-indicator" id="shaderIndicatorA">SHADER</div>
+          </div>
+          <div class="channel-controller" data-channel="A">
+            <div class="controller-row">
+              <button class="ctrl-btn reverse-btn" data-action="reverse" title="Reverse">◀</button>
+              <button class="ctrl-btn pause-btn" data-action="pause" title="Pause">⏸</button>
+              <button class="ctrl-btn play-btn active" data-action="play" title="Play">▶</button>
+            </div>
+            <div class="controller-row">
+              <span class="ctrl-label">Speed</span>
+              <input type="range" class="speed-slider" min="25" max="200" value="100" />
+              <span class="speed-value">100%</span>
+            </div>
+          </div>
+        </div>
+        <div class="channel">
+          <span class="channel-label">Master Output</span>
+          <div class="preview-box master-preview" id="previewMaster">
+            <canvas id="canvasMaster"></canvas>
+          </div>
+        </div>
+        <div class="channel">
+          <span class="channel-label">Channel B</span>
+          <div class="preview-box" id="previewB">
+            <canvas id="canvasB"></canvas>
+            <div class="shader-indicator" id="shaderIndicatorB">SHADER</div>
+          </div>
+          <div class="channel-controller" data-channel="B">
+            <div class="controller-row">
+              <button class="ctrl-btn reverse-btn" data-action="reverse" title="Reverse">◀</button>
+              <button class="ctrl-btn pause-btn" data-action="pause" title="Pause">⏸</button>
+              <button class="ctrl-btn play-btn active" data-action="play" title="Play">▶</button>
+            </div>
+            <div class="controller-row">
+              <span class="ctrl-label">Speed</span>
+              <input type="range" class="speed-slider" min="25" max="200" value="100" />
+              <span class="speed-value">100%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mixer-section">
+        <div class="crossfader-container">
+          <span class="crossfader-label">A</span>
+          <input
+            type="range"
+            class="crossfader"
+            id="crossfader"
+            min="0"
+            max="100"
+            value="50"
+          />
+          <span class="crossfader-label">B</span>
+        </div>
+      </div>
+      <div class="bpm-section">
+        <button class="play-pause-btn playing" id="playPauseBtn" title="Play/Pause">
+          <span id="playPauseIcon">||</span>
+        </button>
+        <div class="bpm-display">
+          <input type="number" class="bpm-input" id="bpmInput" value="120" min="40" max="200" />
+          <span class="bpm-label">BPM</span>
+        </div>
+        <button class="tap-btn" id="tapBtn">TAP</button>
+        <div class="beat-indicators">
+          <div class="beat-dot active" id="beat0"></div>
+          <div class="beat-dot" id="beat1"></div>
+          <div class="beat-dot" id="beat2"></div>
+          <div class="beat-dot" id="beat3"></div>
+        </div>
+        <div class="auto-switch-section">
+          <div class="auto-switch-toggle">
+            <input type="checkbox" id="autoSwitch" />
+            <label for="autoSwitch">Auto Switch</label>
+          </div>
+          <select class="interval-select" id="switchInterval">
+            <option value="1">1 beat</option>
+            <option value="2">2 beats</option>
+            <option value="4" selected>4 beats</option>
+            <option value="8">8 beats</option>
+            <option value="16">16 beats</option>
+          </select>
+        </div>
+      </div>
+      <div class="bank-section">
+        <div class="bank">
+          <span class="bank-label">Bank A</span>
+          <div class="bank-buttons" id="bankA"></div>
+        </div>
+        <div class="bank">
+          <span class="bank-label">Bank B</span>
+          <div class="bank-buttons" id="bankB"></div>
+        </div>
+      </div>
+      <!-- Effects Panel -->
+      <div class="effects-panel">
+        <div class="effects-header" id="effectsHeader">
+          <span class="effects-toggle">▼</span>
+          <span>VIDEO EFFECTS</span>
+        </div>
+
+        <div class="effects-content" id="effectsContent">
+          <!-- Effect List -->
+          <div class="effects-list">
+            <!-- Color Category -->
+            <div class="effect-category">Color</div>
+            <div class="effect-item" data-effect="invert">
+              <span class="effect-indicator"></span>
+              <span class="effect-name">Invert</span>
+              <span class="effect-shortcut">F1</span>
+            </div>
+            <div class="effect-item" data-effect="grayscale">
+              <span class="effect-indicator"></span>
+              <span class="effect-name">Grayscale</span>
+              <span class="effect-shortcut">F2</span>
+            </div>
+            <div class="effect-item" data-effect="sepia">
+              <span class="effect-indicator"></span>
+              <span class="effect-name">Sepia</span>
+              <span class="effect-shortcut">F3</span>
+            </div>
+
+            <!-- Adjust Category -->
+            <div class="effect-category">Adjust</div>
+            <div class="effect-item" data-effect="brightness">
+              <span class="effect-indicator"></span>
+              <span class="effect-name">Brightness</span>
+              <span class="effect-shortcut">F5</span>
+            </div>
+            <div class="effect-item" data-effect="contrast">
+              <span class="effect-indicator"></span>
+              <span class="effect-name">Contrast</span>
+              <span class="effect-shortcut">F6</span>
+            </div>
+
+            <!-- Blur Category -->
+            <div class="effect-category">Blur</div>
+            <div class="effect-item" data-effect="blur">
+              <span class="effect-indicator"></span>
+              <span class="effect-name">Blur</span>
+              <span class="effect-shortcut">F4</span>
+            </div>
+          </div>
+
+          <!-- Parameter Panel -->
+          <div class="effect-params hidden" id="effectParams">
+            <!-- 動的生成 -->
+          </div>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

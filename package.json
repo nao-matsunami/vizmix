@@ -1,0 +1,25 @@
+{
+  "name": "vizmix",
+  "version": "0.5.0",
+  "description": "VizMix - Browser-based VJ Software",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "vj",
+    "playcanvas",
+    "webgl",
+    "media-art"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "playcanvas": "^2.14.4"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
