@@ -136,8 +136,218 @@
       }
       .bank-section {
         display: flex;
-        gap: 40px;
+        gap: 20px;
         justify-content: center;
+        align-items: flex-start;
+      }
+      .bank-area {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+      .bank-area-a {
+        flex-direction: row-reverse;
+      }
+      .bank-area-b {
+        flex-direction: row;
+      }
+      /* ===== Media Browser ===== */
+      .media-browser {
+        width: 320px;
+        min-width: 280px;
+        background: #1a1a1a;
+        border: 1px solid #333;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .media-browser-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 10px;
+        background: #252525;
+        border-bottom: 1px solid #333;
+      }
+      .media-browser-title {
+        font-size: 11px;
+        color: #4fd1c5;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .folder-select-btn {
+        background: #333;
+        border: none;
+        border-radius: 4px;
+        padding: 4px 8px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background 0.15s;
+      }
+      .folder-select-btn:hover {
+        background: #444;
+      }
+      .folder-select-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .media-browser-toolbar {
+        display: flex;
+        gap: 6px;
+        padding: 6px 8px;
+        background: #222;
+        border-bottom: 1px solid #333;
+      }
+      .folder-dropdown {
+        flex: 1;
+        background: #333;
+        border: none;
+        border-radius: 4px;
+        color: #fff;
+        font-size: 11px;
+        padding: 4px 6px;
+        cursor: pointer;
+      }
+      .folder-dropdown:focus {
+        outline: 1px solid #4fd1c5;
+      }
+      .view-toggle {
+        display: flex;
+        gap: 2px;
+      }
+      .view-btn {
+        background: #333;
+        border: none;
+        border-radius: 3px;
+        color: #888;
+        width: 24px;
+        height: 24px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: all 0.15s;
+      }
+      .view-btn:hover {
+        background: #444;
+        color: #fff;
+      }
+      .view-btn.active {
+        background: #4fd1c5;
+        color: #000;
+      }
+      .media-list {
+        max-height: 220px;
+        overflow-y: auto;
+        padding: 8px;
+      }
+      .media-list::-webkit-scrollbar {
+        width: 6px;
+      }
+      .media-list::-webkit-scrollbar-track {
+        background: #1a1a1a;
+      }
+      .media-list::-webkit-scrollbar-thumb {
+        background: #444;
+        border-radius: 3px;
+      }
+      .media-list::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
+      .media-list.grid-view {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+      }
+      .media-list.list-view {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .media-item {
+        background: #2a2a2a;
+        border-radius: 4px;
+        cursor: grab;
+        transition: all 0.15s;
+        position: relative;
+      }
+      .media-item:hover {
+        border: 2px solid #0066cc;
+      }
+      .media-item.dragging {
+        opacity: 0.5;
+      }
+      .media-item.shader {
+        background: linear-gradient(135deg, #3a2a4a, #2a1a3a);
+      }
+      .grid-view .media-item {
+        aspect-ratio: 16/9;
+      }
+      .grid-view .media-thumb {
+        width: 100%;
+        height: 100%;
+        background-size: cover;
+        background-position: center;
+        border-radius: 4px;
+      }
+      .grid-view .media-name {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 2px 4px;
+        background: rgba(0,0,0,0.7);
+        font-size: 9px;
+        color: #ccc;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        border-radius: 0 0 4px 4px;
+      }
+      .list-view .media-item {
+        display: flex;
+        align-items: center;
+        padding: 4px 6px;
+        gap: 8px;
+      }
+      .list-view .media-thumb-small {
+        width: 32px;
+        height: 18px;
+        background: #333;
+        background-size: cover;
+        background-position: center;
+        border-radius: 2px;
+        flex-shrink: 0;
+      }
+      .list-view .media-info {
+        flex: 1;
+        min-width: 0;
+      }
+      .list-view .media-name {
+        font-size: 10px;
+        color: #ddd;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .list-view .media-type {
+        font-size: 9px;
+        color: #666;
+      }
+      .media-status {
+        padding: 4px 8px;
+        font-size: 10px;
+        color: #666;
+        text-align: center;
+        border-top: 1px solid #333;
+      }
+      .media-status.error {
+        color: #f66;
+      }
+      .media-list .loading,
+      .media-list .no-files {
+        padding: 20px;
+        text-align: center;
+        color: #666;
+        font-size: 11px;
       }
       .bank {
         display: flex;
@@ -778,8 +988,9 @@
         transform: translateX(20px);
         background-color: #4fd1c5;
       }
-      /* Channel Controller */
+      /* Channel Controller (Hidden: reverse playback not supported) */
       .channel-controller {
+        display: none;
         width: 320px;
         background: #252525;
         border-radius: 6px;
@@ -958,13 +1169,21 @@
         </div>
       </div>
       <div class="bank-section">
-        <div class="bank">
-          <span class="bank-label">Bank A</span>
-          <div class="bank-buttons" id="bankA"></div>
+        <!-- Bank A Area (Media Browser on left) -->
+        <div class="bank-area bank-area-a">
+          <div class="bank">
+            <span class="bank-label">Bank A</span>
+            <div class="bank-buttons" id="bankA"></div>
+          </div>
+          <div class="media-browser" id="mediaBrowserA"></div>
         </div>
-        <div class="bank">
-          <span class="bank-label">Bank B</span>
-          <div class="bank-buttons" id="bankB"></div>
+        <!-- Bank B Area (Media Browser on right) -->
+        <div class="bank-area bank-area-b">
+          <div class="bank">
+            <span class="bank-label">Bank B</span>
+            <div class="bank-buttons" id="bankB"></div>
+          </div>
+          <div class="media-browser" id="mediaBrowserB"></div>
         </div>
       </div>
       <!-- Effects Panel -->

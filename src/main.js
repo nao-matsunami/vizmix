@@ -60,6 +60,7 @@ import {
 import { initKeyboard, getShortcutList } from "./keyboard.js";
 import { initMidi, getMidiDevices } from "./midi.js";
 import { initEffectsUI as initEffectsPanelUI, syncEffectsUI, handleEffectShortcut, hideEffectParams } from './effectsUI.js';
+import { initMediaBrowsers } from './mediaBrowser.js';
 
 const BANK_SIZE = 8;
 let outputWindow = null;
@@ -149,6 +150,11 @@ async function init() {
   await restoreSettings();
   // デフォルト映像のサムネールを非同期で生成（UIブロックを避ける）
   setTimeout(() => generateDefaultThumbnails(), 500);
+
+  // Media Browser 初期化
+  initMediaBrowsers();
+  console.log("Media Browsers initialized");
+
   console.log("VizMix v0.6.0 Control ready");
 }
 
