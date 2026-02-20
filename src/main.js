@@ -69,18 +69,45 @@ import { initWebcam, getWebcamManager, WebcamManager } from './webcam.js';
 
 const BANK_SIZE = 8;
 
-// ── 出力解像度設定 ────────────────────────────────────────────────────────────
-// パターンA: 1080p（現在）
-const OUTPUT_WIDTH = 1920;
-const OUTPUT_HEIGHT = 1080;
-// パターンB: 720p
-// const OUTPUT_WIDTH = 1280;
-// const OUTPUT_HEIGHT = 720;
-// パターンC: 540p
-// const OUTPUT_WIDTH = 960;
-// const OUTPUT_HEIGHT = 540;
-// captureStream フレームレート（fps）
+// ── captureStream フレームレート ──────────────────────────────────────────────
 const CAPTURE_FPS = 30;
+
+// ── 出力解像度（UIセレクトから動的に取得） ────────────────────────────────────
+const OUTPUT_RESOLUTIONS = {
+  '960x540':   [960,  540],
+  '1280x720':  [1280, 720],
+  '1920x1080': [1920, 1080],
+};
+const OUTPUT_RESOLUTION_KEY = 'vizmix-output-resolution';
+
+let currentOutputWidth  = 1280;
+let currentOutputHeight = 720;
+
+function applyOutputResolution(key) {
+  const entry = OUTPUT_RESOLUTIONS[key];
+  if (!entry) return;
+  [currentOutputWidth, currentOutputHeight] = entry;
+  if (app) {
+    app.resizeCanvas(currentOutputWidth, currentOutputHeight);
+    // resizeCanvas後もCSSを明示的に再適用（アスペクト比崩れ防止）
+    const canvas = app.graphicsDevice.canvas;
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.objectFit = 'contain';
+    console.log(`Output resolution: ${currentOutputWidth}x${currentOutputHeight}`);
+  }
+  localStorage.setItem(OUTPUT_RESOLUTION_KEY, key);
+}
+// ── 映像解像度チェック（4Kブロック用） ──────────────────────────────────────
+function getVideoResolution(url) {
+  return new Promise((resolve) => {
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.onloadedmetadata = () => resolve({ width: v.videoWidth, height: v.videoHeight });
+    v.onerror = () => resolve(null);
+    v.src = url;
+  });
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 let webcamManager = null;
@@ -204,7 +231,7 @@ async function init() {
       outputVideo.play().catch(err => console.warn('Output video.play() failed:', err));
       // 接続完了をOutputに通知 → Outputのリトライループが停止する
       outputWindow.postMessage({ type: 'stream-connected' }, '*');
-      console.log(`captureStream: connected (${OUTPUT_WIDTH}x${OUTPUT_HEIGHT} @${CAPTURE_FPS}fps)`);
+      console.log(`captureStream: connected (${currentOutputWidth}x${currentOutputHeight} @${CAPTURE_FPS}fps)`);
     } else {
       console.error('captureStream: #output video element not found');
     }
@@ -226,6 +253,22 @@ async function handleMessage(data) {
 }
 
 function initUI() {
+  // ── 出力解像度セレクト ────────────────────────────────────────────────────
+  const resolutionSelect = document.getElementById('outputResolution');
+  if (resolutionSelect) {
+    // localStorageから復元（なければデフォルト720p）
+    const saved = localStorage.getItem(OUTPUT_RESOLUTION_KEY) || '1280x720';
+    resolutionSelect.value = saved;
+    // 変数にも反映（initPlayCanvasより先に呼ばれるため）
+    const entry = OUTPUT_RESOLUTIONS[saved];
+    if (entry) [currentOutputWidth, currentOutputHeight] = entry;
+
+    resolutionSelect.addEventListener('change', (e) => {
+      applyOutputResolution(e.target.value);
+    });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   document.getElementById("openOutput").addEventListener("click", () => {
     if (outputWindow && !outputWindow.closed) {
       outputWindow.focus();
@@ -843,6 +886,12 @@ function createBankButtons(containerId, channel) {
         try {
           const media = JSON.parse(vizmixData);
           if (media.mediaType === 'video') {
+            // 4K以上の映像をブロック
+            const res = await getVideoResolution(media.blobUrl);
+            if (res && res.width > 1920) {
+              alert("この映像は4K以上の解像度です。パフォーマンスの問題があるため、1080p以下の映像を使用してください。");
+              return;
+            }
             // Use blob URL directly
             setVideoSource(channel, i, media.blobUrl, media.name, media.type);
             btn.title = media.name;
@@ -916,6 +965,14 @@ function createBankButtons(containerId, channel) {
         const arrayBuffer = await file.arrayBuffer();
         const blob = new Blob([arrayBuffer], { type: file.type });
         const url = URL.createObjectURL(blob);
+
+        // 4K以上の映像をブロック
+        const res = await getVideoResolution(url);
+        if (res && res.width > 1920) {
+          URL.revokeObjectURL(url);
+          alert("この映像は4K以上の解像度です。パフォーマンスの問題があるため、1080p以下の映像を使用してください。");
+          return;
+        }
 
         setVideoSource(channel, i, url, file.name, file.type);
         btn.title = file.name;
@@ -1148,10 +1205,10 @@ async function initPlayCanvas() {
   });
 
   app.setCanvasFillMode(pc.FILLMODE_NONE);
-  app.setCanvasResolution(pc.RESOLUTION_FIXED, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+  app.setCanvasResolution(pc.RESOLUTION_FIXED, currentOutputWidth, currentOutputHeight);
 
-  // captureStream用に固定解像度で描画。CSSでプレビューサイズに縮小表示。
-  app.resizeCanvas(OUTPUT_WIDTH, OUTPUT_HEIGHT);
+  // captureStream用に選択解像度で描画。CSSでプレビューサイズに縮小表示。
+  app.resizeCanvas(currentOutputWidth, currentOutputHeight);
   canvas.style.width = '100%';
   canvas.style.height = '100%';
   canvas.style.objectFit = 'contain';

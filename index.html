@@ -11,7 +11,7 @@
       gtag('config', 'G-GD2PHJX65F');
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VizMix v0.8.0 - Control</title>
+    <title>VizMix v0.8.1 - Control</title>
     <style>
       * {
         margin: 0;
@@ -465,6 +465,20 @@
       }
       .fps-toggle input {
         margin-right: 4px;
+      }
+      .resolution-select {
+        background: #333;
+        border: 1px solid #555;
+        border-radius: 4px;
+        color: #ccc;
+        font-size: 12px;
+        padding: 4px 6px;
+        cursor: pointer;
+        margin-right: 16px;
+      }
+      .resolution-select:focus {
+        outline: none;
+        border-color: #0066cc;
       }
       #fpsDisplay {
         position: fixed;
@@ -1132,7 +1146,7 @@
   <body>
     <header>
       <div>
-        <h1>VizMix <span style="font-size: 14px; font-weight: normal; color: #888;">v0.8.0</span></h1>
+        <h1>VizMix <span style="font-size: 14px; font-weight: normal; color: #888;">v0.8.1</span></h1>
         <p class="tagline">Browser-based VJ Software</p>
       </div>
       <div style="display: flex; align-items: center;">
@@ -1143,6 +1157,11 @@
         <label class="fps-toggle">
           <input type="checkbox" id="showFps"> FPS
         </label>
+        <select id="outputResolution" class="resolution-select" title="Output Resolution">
+          <option value="960x540">540p</option>
+          <option value="1280x720">720p</option>
+          <option value="1920x1080">1080p</option>
+        </select>
         <button class="btn btn-danger" id="clearSettings" title="Reset all settings">Reset</button>
         <a href="manual/" target="_blank" class="manual-link" title="Manual">📖</a>
         <button class="btn btn-primary" id="openOutput">Output Window</button>

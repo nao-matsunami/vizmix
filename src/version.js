@@ -3,7 +3,7 @@
  */
 
 export const APP_NAME = "VizMix";
-export const APP_VERSION = "0.8.0";
+export const APP_VERSION = "0.8.1";
 export const APP_TAGLINE = "Browser-based VJ Software";
 export const APP_FULL_NAME = `${APP_NAME} v${APP_VERSION}`;
 
@@ -17,6 +17,7 @@ export const VERSION_HISTORY = {
   "0.6.0": "Effects (Invert, Grayscale, Sepia, Blur, Brightness, Contrast)",
   "0.7.0": "Media Browser (folder selection, thumbnail grid/list, drag & drop)",
   "0.8.0": "Webcam input (multi-camera, per-channel Media/Cam switch)",
+  "0.8.1": "Output captureStream architecture, resolution selector, 4K block, sync fixes",
 };
 
 export function printVersion() {
