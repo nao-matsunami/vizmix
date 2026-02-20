@@ -26,6 +26,8 @@ const BANKS = {
     shaderCodes: [null, null, null, null, null, null, null, null],
     shaderNames: [null, null, null, null, null, null, null, null],
     shaderVersions: [0, 0, 0, 0, 0, 0, 0, 0],
+    videoFileNames: [null, null, null, null, null, null, null, null],
+    videoMimeTypes: [null, null, null, null, null, null, null, null],
   },
   B: {
     videoSources: [
@@ -42,19 +44,23 @@ const BANKS = {
     shaderCodes: [null, null, null, null, null, null, null, null],
     shaderNames: [null, null, null, null, null, null, null, null],
     shaderVersions: [0, 0, 0, 0, 0, 0, 0, 0],
+    videoFileNames: [null, null, null, null, null, null, null, null],
+    videoMimeTypes: [null, null, null, null, null, null, null, null],
   }
 };
 
 // 外部から動画ソースを設定
-export function setVideoSource(channel, index, url) {
+export function setVideoSource(channel, index, url, fileName = null, mimeType = null) {
   const bank = BANKS[channel];
   if (!bank || index < 0 || index >= 8) return;
-  
+
   bank.videoSources[index] = url;
   bank.sourceTypes[index] = 'video';
   bank.shaderCodes[index] = null;
   bank.shaderNames[index] = null;
-  console.log(`[${channel}] Bank ${index + 1}: Video source updated to: ${url}`);
+  bank.videoFileNames[index] = fileName;
+  bank.videoMimeTypes[index] = mimeType;
+  console.log(`[${channel}] Bank ${index + 1}: Video source updated to: ${url}${fileName ? ` (${fileName})` : ''}`);
 }
 
 export function getVideoSource(channel, index) {
@@ -135,6 +141,25 @@ export function getAllShaderInfo() {
   return result;
 }
 
+// カスタム映像情報を取得（Output Window再接続時の再送用）
+export function getCustomVideoInfo() {
+  const result = { A: [], B: [] };
+  for (const ch of ['A', 'B']) {
+    const bank = BANKS[ch];
+    for (let i = 0; i < 8; i++) {
+      if (bank.sourceTypes[i] === 'video' && bank.videoFileNames[i] && bank.videoSources[i]?.startsWith('blob:')) {
+        result[ch].push({
+          index: i,
+          url: bank.videoSources[i],
+          fileName: bank.videoFileNames[i],
+          mimeType: bank.videoMimeTypes[i] || 'video/mp4',
+        });
+      }
+    }
+  }
+  return result;
+}
+
 class VideoChannel {
   constructor(name) {
     this.name = name;
@@ -192,6 +217,9 @@ class VideoChannel {
 
     console.log(`[${this.name}] Loading video ${index + 1} (${src})`);
 
+    // Clear texture during loading to prevent stale content
+    this.texture = null;
+
     this.video.src = src;
 
     await new Promise((resolve, reject) => {
@@ -202,11 +230,18 @@ class VideoChannel {
       };
     });
 
-    if (!this.videoTexture) {
+    // Always check dimensions and recreate texture if needed
+    const w = this.video.videoWidth;
+    const h = this.video.videoHeight;
+    if (!this.videoTexture || this.videoTexture.width !== w || this.videoTexture.height !== h) {
+      console.log(`[${this.name}] Creating texture: ${w}x${h}${w > 1920 || h > 1080 ? ' (4K)' : ''}`);
+      if (this.videoTexture) {
+        this.videoTexture.destroy();
+      }
       this.videoTexture = new pc.Texture(this.device, {
         name: `videoTexture-${this.name}`,
-        width: this.video.videoWidth,
-        height: this.video.videoHeight,
+        width: w,
+        height: h,
         format: pc.PIXELFORMAT_RGBA8,
         mipmaps: false,
         minFilter: pc.FILTER_LINEAR,
@@ -218,7 +253,7 @@ class VideoChannel {
 
     try {
       await this.video.play();
-      console.log(`[${this.name}] Playing video ${index + 1}`);
+      console.log(`[${this.name}] Playing video ${index + 1} (${w}x${h})`);
     } catch (e) {
       console.warn(`[${this.name}] Autoplay blocked`);
     }
@@ -273,12 +308,14 @@ class VideoChannel {
         console.log(`[${this.name}] Already using video ${index + 1}, skipping`);
         return;
       }
-      
+
       this.currentSourceType = 'video';
       this.currentIndex = index;
       this.shaderSource = null;
       this.currentShaderVersion = -1;
-      
+      // Clear texture to signal loading state (prevents stale content)
+      this.texture = null;
+
       this.loadVideo(index).catch(console.error);
       console.log(`[${this.name}] Switched to video ${index + 1}`);
     }
@@ -298,7 +335,26 @@ class VideoChannel {
     if (this.currentSourceType === 'shader' && this.shaderSource) {
       this.shaderSource.render();
       this.texture = this.shaderSource.getTexture();
-    } else if (this.video && this.videoTexture && this.video.readyState >= this.video.HAVE_CURRENT_DATA) {
+    } else if (this.video && this.video.readyState >= this.video.HAVE_CURRENT_DATA) {
+      // Check if texture needs to be recreated (size mismatch after webcam switch)
+      const videoWidth = this.video.videoWidth;
+      const videoHeight = this.video.videoHeight;
+
+      if (!this.videoTexture || this.videoTexture.width !== videoWidth || this.videoTexture.height !== videoHeight) {
+        console.log(`[${this.name}] Recreating texture: ${videoWidth}x${videoHeight}`);
+        this.videoTexture = new pc.Texture(this.device, {
+          name: `videoTexture-${this.name}`,
+          width: videoWidth,
+          height: videoHeight,
+          format: pc.PIXELFORMAT_RGBA8,
+          mipmaps: false,
+          minFilter: pc.FILTER_LINEAR,
+          magFilter: pc.FILTER_LINEAR,
+          addressU: pc.ADDRESS_CLAMP_TO_EDGE,
+          addressV: pc.ADDRESS_CLAMP_TO_EDGE,
+        });
+      }
+
       this.videoTexture.setSource(this.video);
       this.texture = this.videoTexture;
       if (this.video.paused && !document.hidden && this.playbackState === 'play') {
@@ -385,6 +441,8 @@ export class VideoManager {
     this.channelA = new VideoChannel("A");
     this.channelB = new VideoChannel("B");
     this.initialized = false;
+    this.webcamVideos = { A: null, B: null };
+    this.sourceMode = { A: 'media', B: 'media' }; // 'media' or 'webcam'
   }
 
   async init(device) {
@@ -414,10 +472,78 @@ export class VideoManager {
     }
   }
 
+  /**
+   * Set webcam video element as source for a channel
+   */
+  setWebcamSource(channel, videoElement) {
+    this.webcamVideos[channel] = videoElement;
+    this.sourceMode[channel] = 'webcam';
+    console.log(`[VideoManager] Webcam source set for channel ${channel}`);
+  }
+
+  /**
+   * Clear webcam source and return to media mode
+   */
+  clearWebcamSource(channel) {
+    this.webcamVideos[channel] = null;
+    this.sourceMode[channel] = 'media';
+    console.log(`[VideoManager] Webcam source cleared for channel ${channel}`);
+  }
+
+  /**
+   * Get current video element for a channel (bank video or webcam)
+   */
+  getActiveVideo(channel) {
+    if (this.sourceMode[channel] === 'webcam' && this.webcamVideos[channel]) {
+      return this.webcamVideos[channel];
+    }
+    const vc = channel === 'A' ? this.channelA : this.channelB;
+    return vc.video;
+  }
+
   update() {
     if (!this.initialized) return;
-    this.channelA.update();
-    this.channelB.update();
+
+    // Update channel A (use webcam if active)
+    if (this.sourceMode.A === 'webcam' && this.webcamVideos.A) {
+      this.updateWebcamTexture('A');
+    } else {
+      this.channelA.update();
+    }
+
+    // Update channel B (use webcam if active)
+    if (this.sourceMode.B === 'webcam' && this.webcamVideos.B) {
+      this.updateWebcamTexture('B');
+    } else {
+      this.channelB.update();
+    }
+  }
+
+  updateWebcamTexture(channel) {
+    const webcamVideo = this.webcamVideos[channel];
+    const vc = channel === 'A' ? this.channelA : this.channelB;
+
+    if (!webcamVideo || webcamVideo.readyState < webcamVideo.HAVE_CURRENT_DATA) {
+      return;
+    }
+
+    // Reuse or create video texture
+    if (!vc.videoTexture || vc.videoTexture.width !== webcamVideo.videoWidth || vc.videoTexture.height !== webcamVideo.videoHeight) {
+      vc.videoTexture = new pc.Texture(vc.device, {
+        name: `webcamTexture-${channel}`,
+        width: webcamVideo.videoWidth || 1280,
+        height: webcamVideo.videoHeight || 720,
+        format: pc.PIXELFORMAT_RGBA8,
+        mipmaps: false,
+        minFilter: pc.FILTER_LINEAR,
+        magFilter: pc.FILTER_LINEAR,
+        addressU: pc.ADDRESS_CLAMP_TO_EDGE,
+        addressV: pc.ADDRESS_CLAMP_TO_EDGE,
+      });
+    }
+
+    vc.videoTexture.setSource(webcamVideo);
+    vc.texture = vc.videoTexture;
   }
 
   getTextureA() {

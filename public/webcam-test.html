@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Webcam Test</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #222; color: #fff; }
+    video { background: #000; border: 2px solid #444; }
+    button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    #status { margin: 10px 0; padding: 10px; background: #333; }
+  </style>
+</head>
+<body>
+  <h1>Webcam Test</h1>
+  <div id="status">Status: Ready</div>
+  <div>
+    <button onclick="startCamera()">Start Camera</button>
+    <button onclick="stopCamera()">Stop Camera</button>
+  </div>
+  <br>
+  <video id="video" width="640" height="480" autoplay muted playsinline></video>
+  
+  <script>
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+    let stream = null;
+
+    async function startCamera() {
+      try {
+        status.textContent = 'Status: Requesting camera access...';
+        
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 1280, height: 720 },
+          audio: false
+        });
+        
+        video.srcObject = stream;
+        
+        const track = stream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        status.textContent = `Status: Camera active - ${settings.width}x${settings.height} @ ${track.label}`;
+        
+        console.log('Camera started:', track.label);
+        console.log('Settings:', settings);
+      } catch (err) {
+        status.textContent = `Status: Error - ${err.message}`;
+        console.error('Camera error:', err);
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+        stream = null;
+        status.textContent = 'Status: Camera stopped';
+      }
+    }
+
+    // List available devices
+    navigator.mediaDevices.enumerateDevices().then(devices => {
+      const videoDevices = devices.filter(d => d.kind === 'videoinput');
+      console.log('Available cameras:', videoDevices);
+    });
+  </script>
+</body>
+</html>

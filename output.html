@@ -23,10 +23,15 @@
         height: 100%;
         background: #000;
         overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       #output {
         display: block;
-        /* サイズはJSで制御 */
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
       }
       .fullscreen-hint {
         position: fixed;
@@ -41,7 +46,7 @@
     </style>
   </head>
   <body>
-    <canvas id="output"></canvas>
+    <video id="output" autoplay playsinline></video>
     <div class="fullscreen-hint">Press F or double-click for fullscreen</div>
     <script type="module" src="/src/output.js"></script>
   </body>

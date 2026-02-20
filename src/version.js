@@ -3,7 +3,7 @@
  */
 
 export const APP_NAME = "VizMix";
-export const APP_VERSION = "0.6.0";
+export const APP_VERSION = "0.8.0";
 export const APP_TAGLINE = "Browser-based VJ Software";
 export const APP_FULL_NAME = `${APP_NAME} v${APP_VERSION}`;
 
@@ -15,6 +15,8 @@ export const VERSION_HISTORY = {
   "0.5.0": "MIDI controller support",
   "0.5.1": "Bug fixes (Output Window sync, default thumbnails, manual icon)",
   "0.6.0": "Effects (Invert, Grayscale, Sepia, Blur, Brightness, Contrast)",
+  "0.7.0": "Media Browser (folder selection, thumbnail grid/list, drag & drop)",
+  "0.8.0": "Webcam input (multi-camera, per-channel Media/Cam switch)",
 };
 
 export function printVersion() {

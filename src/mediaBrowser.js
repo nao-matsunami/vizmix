@@ -17,6 +17,8 @@ export class MediaBrowser {
     this.files = [];
     this.viewMode = 'grid'; // 'grid' | 'list'
     this.thumbnailCache = new Map();
+    this.fileCache = new Map(); // Cache File objects for drag & drop
+    this.blobUrlCache = new Map(); // Cache Blob URLs for drag & drop
 
     this.init();
   }
@@ -153,6 +155,14 @@ export class MediaBrowser {
     }
   }
 
+  formatResolution(file) {
+    if (!file.width || !file.height) return '';
+    const is4K = file.width > 1920 || file.height > 1080;
+    const label = `${file.width}x${file.height}`;
+    const cls = is4K ? 'media-resolution is-4k' : 'media-resolution';
+    return `<span class="${cls}">${label}</span>`;
+  }
+
   renderFileList() {
     this.mediaList.innerHTML = '';
 
@@ -167,9 +177,12 @@ export class MediaBrowser {
       item.dataset.index = index;
       item.draggable = true;
 
+      const resInfo = this.formatResolution(file);
+
       if (this.viewMode === 'grid') {
         item.innerHTML = `
           <div class="media-thumb"></div>
+          ${resInfo}
           <div class="media-name">${this.truncateName(file.name)}</div>
         `;
       } else {
@@ -177,7 +190,7 @@ export class MediaBrowser {
           <div class="media-thumb-small"></div>
           <div class="media-info">
             <div class="media-name">${file.name}</div>
-            <div class="media-type">${file.type.toUpperCase()}</div>
+            <div class="media-type">${file.type.toUpperCase()} ${resInfo}</div>
           </div>
         `;
       }
@@ -211,26 +224,76 @@ export class MediaBrowser {
     this.renderFileList();
   }
 
+  async probeVideoResolution(blobUrl) {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+      video.onloadedmetadata = () => {
+        resolve({ width: video.videoWidth, height: video.videoHeight });
+        video.src = '';
+        video.remove();
+      };
+      video.onerror = () => {
+        resolve(null);
+        video.remove();
+      };
+      video.src = blobUrl;
+    });
+  }
+
   async generateThumbnails() {
     for (const file of this.files) {
-      if (this.thumbnailCache.has(file.name)) continue;
-      if (file.type !== 'video') continue;
+      if (this.blobUrlCache.has(file.name)) continue;
 
       try {
+        // Cache the File object and create Blob URL for drag & drop
         const fileData = await file.handle.getFile();
-        const url = URL.createObjectURL(fileData);
-        const thumbnail = await generateVideoThumbnail(url);
-        URL.revokeObjectURL(url);
+        this.fileCache.set(file.name, fileData);
 
+        // Create and cache Blob URL (keep it for drag & drop)
+        const blobUrl = URL.createObjectURL(fileData);
+        this.blobUrlCache.set(file.name, blobUrl);
+        console.log(`[MediaBrowser ${this.channel}] Cached: ${file.name} -> ${blobUrl}`);
+
+        if (file.type !== 'video') continue;
+
+        // Probe video resolution
+        const resolution = await this.probeVideoResolution(blobUrl);
+        if (resolution) {
+          file.width = resolution.width;
+          file.height = resolution.height;
+          const is4K = resolution.width > 1920 || resolution.height > 1080;
+          if (is4K) {
+            console.warn(`[MediaBrowser ${this.channel}] 4K video detected: ${file.name} (${resolution.width}x${resolution.height})`);
+          }
+        }
+
+        // Generate thumbnail (use same blob URL)
+        const thumbnail = await generateVideoThumbnail(blobUrl);
         this.thumbnailCache.set(file.name, thumbnail);
 
-        // Update displayed thumbnail
+        // Update displayed thumbnail and resolution
         const index = this.files.indexOf(file);
         const item = this.mediaList.querySelector(`[data-index="${index}"]`);
         if (item) {
           const thumb = item.querySelector('.media-thumb, .media-thumb-small');
           if (thumb) {
             thumb.style.backgroundImage = `url(${thumbnail})`;
+          }
+          // Update resolution display
+          const existingRes = item.querySelector('.media-resolution');
+          if (!existingRes && resolution) {
+            const resEl = document.createElement('span');
+            const is4K = resolution.width > 1920 || resolution.height > 1080;
+            resEl.className = `media-resolution${is4K ? ' is-4k' : ''}`;
+            resEl.textContent = `${resolution.width}x${resolution.height}`;
+            if (this.viewMode === 'grid') {
+              item.insertBefore(resEl, item.querySelector('.media-name'));
+            } else {
+              const typeEl = item.querySelector('.media-type');
+              if (typeEl) typeEl.appendChild(document.createTextNode(' ')), typeEl.appendChild(resEl);
+            }
           }
         }
       } catch (err) {
@@ -239,28 +302,39 @@ export class MediaBrowser {
     }
   }
 
-  async handleDragStart(e, file) {
+  handleDragStart(e, file) {
+    console.log(`[MediaBrowser ${this.channel}] dragstart: ${file.name}`);
     e.target.classList.add('dragging');
 
-    try {
-      const fileData = await file.handle.getFile();
+    // Get cached blob URL
+    const blobUrl = this.blobUrlCache.get(file.name);
+    const fileData = this.fileCache.get(file.name);
+    if (!blobUrl || !fileData) {
+      console.warn(`[MediaBrowser ${this.channel}] File not cached yet: ${file.name}`);
+      e.preventDefault();
+      return;
+    }
 
-      // Create a DataTransfer with the file
-      e.dataTransfer.effectAllowed = 'copy';
-      e.dataTransfer.setData('text/plain', file.name);
+    // Set up DataTransfer with custom data type
+    e.dataTransfer.effectAllowed = 'copy';
 
-      // Store file data for drop handling
-      e.dataTransfer.items.add(fileData);
+    // Use custom MIME type for VizMix media browser
+    const mediaData = JSON.stringify({
+      name: file.name,
+      type: fileData.type || (file.type === 'video' ? 'video/mp4' : 'text/plain'),
+      mediaType: file.type, // 'video' or 'shader'
+      blobUrl: blobUrl
+    });
+    e.dataTransfer.setData('application/vizmix-media', mediaData);
+    e.dataTransfer.setData('text/plain', file.name);
+    console.log(`[MediaBrowser ${this.channel}] setData: ${mediaData}`);
 
-      // Set drag image
-      const thumb = e.target.querySelector('.media-thumb, .media-thumb-small');
-      if (thumb && thumb.style.backgroundImage) {
-        const img = new Image();
-        img.src = thumb.style.backgroundImage.slice(5, -2);
-        e.dataTransfer.setDragImage(img, 30, 20);
-      }
-    } catch (err) {
-      console.error('Drag start failed:', err);
+    // Set drag image
+    const thumb = e.target.querySelector('.media-thumb, .media-thumb-small');
+    if (thumb && thumb.style.backgroundImage) {
+      const img = new Image();
+      img.src = thumb.style.backgroundImage.slice(5, -2);
+      e.dataTransfer.setDragImage(img, 30, 20);
     }
   }
 

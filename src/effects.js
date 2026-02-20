@@ -1,6 +1,6 @@
 /**
  * VizMix - Effects Manager
- * v0.6.0
+ * v0.7.0
  */
 
 // エフェクト状態

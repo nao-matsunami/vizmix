@@ -18,11 +18,13 @@
   <header>
     <h1>VizMix Manual</h1>
     <p class="tagline">Browser-based VJ Software</p>
-    <p class="version">Version 0.6.0</p>
+    <p class="version">Version 0.8.0</p>
     <nav>
       <a href="#about">About</a>
       <a href="#install">Installation</a>
       <a href="#basic">Basic Usage</a>
+      <a href="#mediabrowser">Media Browser</a>
+      <a href="#webcam">Webcam</a>
       <a href="#keyboard">Keyboard</a>
       <a href="#bpm">BPM</a>
       <a href="#effects">Effects</a>
@@ -65,7 +67,7 @@
       <ol>
         <li>Download and extract the ZIP file</li>
         <li>Open Command Prompt / Terminal</li>
-        <li>Navigate to folder: <code>cd VizMix-v0.6.0</code></li>
+        <li>Navigate to folder: <code>cd VizMix-v0.8.0</code></li>
         <li>Start server: <code>python -m http.server 8000</code></li>
         <li>Open <code>http://localhost:8000</code> in browser</li>
       </ol>
@@ -74,7 +76,7 @@
       <ol>
         <li>Download and extract the ZIP file</li>
         <li>Open Command Prompt / Terminal</li>
-        <li>Navigate to folder: <code>cd VizMix-v0.6.0</code></li>
+        <li>Navigate to folder: <code>cd VizMix-v0.8.0</code></li>
         <li>Start server: <code>npx serve</code></li>
         <li>Open the displayed URL in browser</li>
       </ol>
@@ -106,6 +108,7 @@
         <li>Click bank buttons to switch videos</li>
       </ol>
       <p class="note">Supported formats: MP4 (H.264), WebM (VP8/VP9). MP4 recommended.</p>
+      <p class="note">Note: Speed controls (reverse playback, etc.) have been hidden in v0.7.0.</p>
 
       <h3>Loading Shaders</h3>
       <ol>
@@ -123,6 +126,67 @@
 
       <h3>Output Window</h3>
       <p>Click "Open Output" to open the output window. Move it to the monitor connected to your projector or LED and make it fullscreen.</p>
+    </section>
+
+    <section id="mediabrowser">
+      <h2>Media Browser</h2>
+      <p>Media Browser panels are located next to Bank A / Bank B. Browse folder contents and easily assign videos to banks.</p>
+
+      <h3>Selecting a Folder</h3>
+      <ol>
+        <li>Click the "Select Folder" button</li>
+        <li>Choose a folder containing video files</li>
+        <li>Supported files will be displayed as thumbnails</li>
+      </ol>
+
+      <h3>View Modes</h3>
+      <ul>
+        <li><strong>Grid View</strong>: Display thumbnails in a grid layout</li>
+        <li><strong>List View</strong>: Display filenames with thumbnails vertically</li>
+      </ul>
+      <p>Toggle between views using the icons in the panel header.</p>
+
+      <h3>Assigning to Banks</h3>
+      <ol>
+        <li>Drag a thumbnail from the Media Browser</li>
+        <li>Drop it onto the desired bank button</li>
+        <li>The video is loaded and assigned to the bank</li>
+      </ol>
+
+      <h3>Supported Formats</h3>
+      <ul>
+        <li>MP4 (H.264) - Recommended</li>
+        <li>WebM</li>
+      </ul>
+    </section>
+
+    <section id="webcam">
+      <h2>Webcam</h2>
+      <p>Use the Media / Cam toggle button below the Channel A / Channel B preview to switch to camera input.</p>
+
+      <h3>Basic Usage</h3>
+      <ul>
+        <li><strong>Media / Cam Button</strong>: Click to toggle between Media mode and Cam mode</li>
+        <li><strong>Cam Mode</strong>: Display camera feed in real-time</li>
+        <li><strong>Media Mode</strong>: Display normal bank media</li>
+      </ul>
+
+      <h3>Multi-Camera Support</h3>
+      <ul>
+        <li>Select which camera to use from the dropdown menu</li>
+        <li>Channel A and Channel B can use different cameras</li>
+        <li>OBS Virtual Camera and similar tools are also supported</li>
+      </ul>
+
+      <h3>Effects</h3>
+      <p>VIDEO EFFECTS and the crossfader are applied to camera footage as well. You can apply effects to camera input just like media files.</p>
+
+      <h3>Requirements</h3>
+      <ul>
+        <li>HTTPS or localhost environment required</li>
+        <li>Browser will request camera access permission on first use</li>
+        <li>If camera is not recognized, try refreshing the page</li>
+      </ul>
     </section>
 
     <section id="keyboard">
@@ -331,7 +395,7 @@
 
   <footer>
     <p><a href="../../">← Back to VizMix</a></p>
-    <p>VizMix v0.6.0 | <a href="../ja/">日本語</a></p>
+    <p>VizMix v0.8.0 | <a href="../ja/">日本語</a></p>
   </footer>
 </body>
 </html>

@@ -1,7 +1,7 @@
 /**
  * VizMix - Effect Shader
  * Post-processing effects for master output
- * v0.6.0
+ * v0.7.0
  */
 
 // エフェクトフラグメントシェーダー

@@ -11,7 +11,7 @@
       gtag('config', 'G-GD2PHJX65F');
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VizMix v0.6.0 - Control</title>
+    <title>VizMix v0.8.0 - Control</title>
     <style>
       * {
         margin: 0;
@@ -342,6 +342,27 @@
       .media-status.error {
         color: #f66;
       }
+      .media-resolution {
+        font-size: 8px;
+        color: #888;
+      }
+      .media-resolution.is-4k {
+        color: #f90;
+        font-weight: bold;
+      }
+      .grid-view .media-resolution {
+        position: absolute;
+        top: 2px;
+        right: 3px;
+        background: rgba(0,0,0,0.6);
+        padding: 1px 3px;
+        border-radius: 2px;
+        font-size: 8px;
+      }
+      .grid-view .media-resolution.is-4k {
+        background: rgba(180,80,0,0.7);
+        color: #fff;
+      }
       .media-list .loading,
       .media-list .no-files {
         padding: 20px;
@@ -358,6 +379,55 @@
         font-size: 12px;
         color: #888;
         text-align: center;
+      }
+      /* Source Toggle (Media/Cam) - below preview */
+      .source-toggle-row {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-top: 8px;
+      }
+      .source-toggle {
+        display: flex;
+        gap: 4px;
+      }
+      .source-btn {
+        flex: 1;
+        padding: 5px 8px;
+        background: #333;
+        border: 1px solid #444;
+        border-radius: 4px;
+        color: #888;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .source-btn:hover {
+        background: #444;
+      }
+      .source-btn.active {
+        background: #0066cc;
+        border-color: #0088ff;
+        color: #fff;
+      }
+      .source-btn.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      /* Camera Select Row */
+      .cam-select-row {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .cam-select {
+        flex: 1;
+        padding: 4px 6px;
+        background: #333;
+        border: 1px solid #444;
+        border-radius: 4px;
+        color: #fff;
+        font-size: 10px;
       }
       .bank-buttons {
         display: grid;
@@ -1062,7 +1132,7 @@
   <body>
     <header>
       <div>
-        <h1>VizMix <span style="font-size: 14px; font-weight: normal; color: #888;">v0.6.0</span></h1>
+        <h1>VizMix <span style="font-size: 14px; font-weight: normal; color: #888;">v0.8.0</span></h1>
         <p class="tagline">Browser-based VJ Software</p>
       </div>
       <div style="display: flex; align-items: center;">
@@ -1086,16 +1156,15 @@
             <canvas id="canvasA"></canvas>
             <div class="shader-indicator" id="shaderIndicatorA">SHADER</div>
           </div>
-          <div class="channel-controller" data-channel="A">
-            <div class="controller-row">
-              <button class="ctrl-btn reverse-btn" data-action="reverse" title="Reverse">◀</button>
-              <button class="ctrl-btn pause-btn" data-action="pause" title="Pause">⏸</button>
-              <button class="ctrl-btn play-btn active" data-action="play" title="Play">▶</button>
+          <div class="source-toggle-row">
+            <div class="source-toggle">
+              <button class="source-btn active" data-channel="A" data-source="media">🎬 Media</button>
+              <button class="source-btn" data-channel="A" data-source="cam">📷 Cam</button>
             </div>
-            <div class="controller-row">
-              <span class="ctrl-label">Speed</span>
-              <input type="range" class="speed-slider" min="25" max="200" value="100" />
-              <span class="speed-value">100%</span>
+            <div class="cam-select-row" id="camSelectRowA" style="display: none;">
+              <select class="cam-select" id="camSelectA">
+                <option value="">-- Camera --</option>
+              </select>
             </div>
           </div>
         </div>
@@ -1111,16 +1180,15 @@
             <canvas id="canvasB"></canvas>
             <div class="shader-indicator" id="shaderIndicatorB">SHADER</div>
           </div>
-          <div class="channel-controller" data-channel="B">
-            <div class="controller-row">
-              <button class="ctrl-btn reverse-btn" data-action="reverse" title="Reverse">◀</button>
-              <button class="ctrl-btn pause-btn" data-action="pause" title="Pause">⏸</button>
-              <button class="ctrl-btn play-btn active" data-action="play" title="Play">▶</button>
+          <div class="source-toggle-row">
+            <div class="source-toggle">
+              <button class="source-btn active" data-channel="B" data-source="media">🎬 Media</button>
+              <button class="source-btn" data-channel="B" data-source="cam">📷 Cam</button>
             </div>
-            <div class="controller-row">
-              <span class="ctrl-label">Speed</span>
-              <input type="range" class="speed-slider" min="25" max="200" value="100" />
-              <span class="speed-value">100%</span>
+            <div class="cam-select-row" id="camSelectRowB" style="display: none;">
+              <select class="cam-select" id="camSelectB">
+                <option value="">-- Camera --</option>
+              </select>
             </div>
           </div>
         </div>

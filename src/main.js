@@ -1,5 +1,5 @@
 /**
- * VizMix v0.6.0 - Control Screen
+ * VizMix v0.7.0 - Control Screen
  * Plane-based video display with opacity crossfade
  * Each channel has independent 8 banks
  * BPM sync with auto-switch
@@ -15,10 +15,14 @@ import {
   initBroadcast,
   setCrossfade,
   setChannelSource,
+  setOutputWindow,
   broadcastState,
+  broadcastBankSwitch,
+  broadcastReset,
   broadcastVideoFile,
   broadcastShaderFile,
   broadcastAllShaders,
+  transferAllCustomVideos,
   broadcastBpmState,
   broadcastBeat,
   broadcastAutoSwitch,
@@ -61,8 +65,26 @@ import { initKeyboard, getShortcutList } from "./keyboard.js";
 import { initMidi, getMidiDevices } from "./midi.js";
 import { initEffectsUI as initEffectsPanelUI, syncEffectsUI, handleEffectShortcut, hideEffectParams } from './effectsUI.js';
 import { initMediaBrowsers } from './mediaBrowser.js';
+import { initWebcam, getWebcamManager, WebcamManager } from './webcam.js';
 
 const BANK_SIZE = 8;
+
+// ── 出力解像度設定 ────────────────────────────────────────────────────────────
+// パターンA: 1080p（現在）
+const OUTPUT_WIDTH = 1920;
+const OUTPUT_HEIGHT = 1080;
+// パターンB: 720p
+// const OUTPUT_WIDTH = 1280;
+// const OUTPUT_HEIGHT = 720;
+// パターンC: 540p
+// const OUTPUT_WIDTH = 960;
+// const OUTPUT_HEIGHT = 540;
+// captureStream フレームレート（fps）
+const CAPTURE_FPS = 30;
+// ─────────────────────────────────────────────────────────────────────────────
+
+let webcamManager = null;
+const channelSourceMode = { A: 'media', B: 'media' }; // 'media' or 'cam'
 let outputWindow = null;
 let app = null;
 let planeA = null;
@@ -124,10 +146,18 @@ function updateDebugOverlay() {
 }
 
 async function init() {
-  console.log("VizMix v0.6.0 Control initializing...");
+  console.log("VizMix v0.8.0 Control initializing...");
   initBroadcast(handleMessage);
   initUI();
   await initPlayCanvas();
+
+  // mixer state を VideoManager の実際の状態と同期（初期値ハードコードに依存しない）
+  state.channelA.source = videoManager.channelA.currentSourceType;
+  state.channelA.videoIndex = videoManager.channelA.currentIndex;
+  state.channelB.source = videoManager.channelB.currentSourceType;
+  state.channelB.videoIndex = videoManager.channelB.currentIndex;
+  console.log(`Mixer state synced: A=index ${state.channelA.videoIndex}, B=index ${state.channelB.videoIndex}`);
+
   initChannelControllers();
   createDebugOverlay();
   initKeyboardShortcuts();
@@ -155,35 +185,68 @@ async function init() {
   initMediaBrowsers();
   console.log("Media Browsers initialized");
 
-  console.log("VizMix v0.6.0 Control ready");
+  // Webcam 初期化
+  await initWebcamUI();
+
+  // Output Windowからの ready通知を受けてcaptureStreamを接続
+  window.addEventListener('message', (e) => {
+    if (e.data?.type !== 'output-ready') return;
+
+    // outputWindowの参照を更新（リロード後も対応）
+    outputWindow = e.source;
+    setOutputWindow(outputWindow);
+
+    // PlayCanvasキャンバスからMediaStreamを取得してOutputの<video>に接続
+    const stream = app.graphicsDevice.canvas.captureStream(CAPTURE_FPS);
+    const outputVideo = outputWindow.document.querySelector('#output');
+    if (outputVideo) {
+      outputVideo.srcObject = stream;
+      outputVideo.play().catch(err => console.warn('Output video.play() failed:', err));
+      // 接続完了をOutputに通知 → Outputのリトライループが停止する
+      outputWindow.postMessage({ type: 'stream-connected' }, '*');
+      console.log(`captureStream: connected (${OUTPUT_WIDTH}x${OUTPUT_HEIGHT} @${CAPTURE_FPS}fps)`);
+    } else {
+      console.error('captureStream: #output video element not found');
+    }
+
+    // エフェクト初期状態を同期
+    broadcastEffectsState();
+  });
+
+  console.log("VizMix v0.8.0 Control ready");
 }
 
-function handleMessage(data) {
+async function handleMessage(data) {
   if (data.type === "request-state") {
     console.log("Received request-state from Output Window");
     broadcastAllShaders();
-    setTimeout(() => {
-      broadcastState();
-    }, 50);
+    await transferAllCustomVideos();
+    broadcastState();
   }
 }
 
 function initUI() {
   document.getElementById("openOutput").addEventListener("click", () => {
-    if (outputWindow && !outputWindow.closed) outputWindow.focus();
-    else
+    if (outputWindow && !outputWindow.closed) {
+      outputWindow.focus();
+    } else {
       outputWindow = window.open(
         "./output.html",
         "VizMix-Output",
         "width=1280,height=720"
       );
+    }
+    // postMessage + Transferable用にOutput Window参照を登録
+    setOutputWindow(outputWindow);
   });
 
   // Clear settings button
   document.getElementById("clearSettings").addEventListener("click", () => {
     if (confirm("全ての設定をクリアしますか？\nAll settings will be reset.")) {
+      broadcastReset();
       clearSettings();
-      location.reload();
+      // BroadcastChannelメッセージ送信完了を待ってからリロード
+      setTimeout(() => location.reload(), 200);
     }
   });
 
@@ -621,8 +684,21 @@ function selectBank(channel, index) {
   });
 
   const sourceType = getSourceType(channel, index);
+  const videoChannel = channel === "A" ? videoManager.channelA : videoManager.channelB;
+
+  // シェーダーのバージョンチェック（変更があれば強制リロード）
+  if (sourceType === 'shader') {
+    const currentVersion = videoChannel.currentShaderVersion;
+    const bankVersion = getShaderVersion(channel, index);
+    if (currentVersion !== bankVersion || videoChannel.currentIndex !== index) {
+      videoChannel.currentShaderVersion = -1;
+    }
+  }
+
   videoManager.setChannelSource(channel, index);
   setChannelSource(channel, sourceType, index);
+  // Send explicit bank-switch message for reliable Output sync
+  broadcastBankSwitch(channel, sourceType, index);
   updateChannelPreview(channel);
 }
 
@@ -741,27 +817,8 @@ function createBankButtons(containerId, channel) {
     btn.appendChild(numberSpan);
 
     btn.addEventListener("click", () => {
-      const sourceType = getSourceType(channel, i);
-      console.log(`Bank button clicked: channel=${channel}, index=${i}, type=${sourceType}`);
-      
-      container
-        .querySelectorAll(".bank-btn")
-        .forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-
-      const videoChannel = channel === "A" ? videoManager.channelA : videoManager.channelB;
-      
-      if (sourceType === 'shader') {
-        const currentVersion = videoChannel.currentShaderVersion;
-        const bankVersion = getShaderVersion(channel, i);
-        if (currentVersion !== bankVersion || videoChannel.currentIndex !== i) {
-          videoChannel.currentShaderVersion = -1;
-        }
-      }
-
-      videoManager.setChannelSource(channel, i);
-      setChannelSource(channel, sourceType, i);
-      updateChannelPreview(channel);
+      console.log(`Bank button clicked: channel=${channel}, index=${i}, type=${getSourceType(channel, i)}`);
+      selectBank(channel, i);
     });
 
     btn.addEventListener("dragover", (e) => {
@@ -777,15 +834,90 @@ function createBankButtons(containerId, channel) {
       e.preventDefault();
       btn.classList.remove("dragover");
 
-      const file = e.dataTransfer.files[0];
-      if (!file) return;
+      console.log(`[Bank ${channel}${i + 1}] drop event received`);
+
+      // Check for VizMix media browser data first
+      const vizmixData = e.dataTransfer.getData('application/vizmix-media');
+      if (vizmixData) {
+        console.log(`[Bank ${channel}${i + 1}] VizMix media data: ${vizmixData}`);
+        try {
+          const media = JSON.parse(vizmixData);
+          if (media.mediaType === 'video') {
+            // Use blob URL directly
+            setVideoSource(channel, i, media.blobUrl, media.name, media.type);
+            btn.title = media.name;
+            btn.classList.remove("shader");
+            btn.classList.add("custom");
+            console.log(`[${channel}] Bank ${i + 1}: Assigned video "${media.name}" from MediaBrowser`);
+
+            // Generate thumbnail
+            try {
+              const thumbnail = await generateVideoThumbnail(media.blobUrl);
+              setButtonThumbnail(btn, thumbnail);
+              updateBankSettings(channel, i, { type: 'video', thumbnail, name: media.name });
+            } catch (err) {
+              console.warn("Failed to generate thumbnail:", err);
+              updateBankSettings(channel, i, { type: 'video', thumbnail: null, name: media.name });
+            }
+
+            // Note: Can't broadcast blob URL to Output Window, need to fetch and send arrayBuffer
+            try {
+              const response = await fetch(media.blobUrl);
+              const arrayBuffer = await response.arrayBuffer();
+              broadcastVideoFile(channel, i, arrayBuffer, media.type, media.name);
+            } catch (err) {
+              console.warn("Failed to broadcast video to Output:", err);
+            }
+
+            if (btn.classList.contains("active")) {
+              const videoChannel = channel === "A" ? videoManager.channelA : videoManager.channelB;
+              videoChannel.currentIndex = -1;
+              videoManager.setChannelSource(channel, i);
+              setChannelSource(channel, "video", i);
+              updateChannelPreview(channel);
+            }
+          } else if (media.mediaType === 'shader') {
+            // Handle shader from MediaBrowser
+            try {
+              const response = await fetch(media.blobUrl);
+              const shaderCode = await response.text();
+              handleShaderCode(channel, i, shaderCode, media.name, btn);
+            } catch (err) {
+              console.error("Failed to load shader:", err);
+            }
+          }
+          return;
+        } catch (err) {
+          console.error("Failed to parse VizMix media data:", err);
+        }
+      }
+
+      // Fallback: Handle external file drop (from OS file manager)
+      console.log(`[Bank ${channel}${i + 1}] files count: ${e.dataTransfer.files.length}`);
+      console.log(`[Bank ${channel}${i + 1}] items count: ${e.dataTransfer.items.length}`);
+
+      let file = null;
+      if (e.dataTransfer.files.length > 0) {
+        file = e.dataTransfer.files[0];
+      } else if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+        const item = e.dataTransfer.items[0];
+        if (item.kind === 'file') {
+          file = item.getAsFile();
+        }
+      }
+
+      if (!file) {
+        console.warn(`[Bank ${channel}${i + 1}] No file in drop event`);
+        return;
+      }
+      console.log(`[Bank ${channel}${i + 1}] File: ${file.name}, type: ${file.type}, size: ${file.size}`);
 
       if (file.type.startsWith("video/")) {
         const arrayBuffer = await file.arrayBuffer();
         const blob = new Blob([arrayBuffer], { type: file.type });
         const url = URL.createObjectURL(blob);
 
-        setVideoSource(channel, i, url);
+        setVideoSource(channel, i, url, file.name, file.type);
         btn.title = file.name;
         btn.classList.remove("shader");
         btn.classList.add("custom");
@@ -796,8 +928,8 @@ function createBankButtons(containerId, channel) {
           const thumbnail = await generateVideoThumbnail(url);
           setButtonThumbnail(btn, thumbnail);
           updateBankSettings(channel, i, { type: 'video', thumbnail, name: file.name });
-        } catch (e) {
-          console.warn("Failed to generate thumbnail:", e);
+        } catch (err) {
+          console.warn("Failed to generate thumbnail:", err);
           updateBankSettings(channel, i, { type: 'video', thumbnail: null, name: file.name });
         }
 
@@ -830,15 +962,52 @@ function updateChannelPreview(channel) {
 
   if (!preview) return;
 
-  if (videoChannel.currentSourceType === 'shader') {
-    preview.classList.add('shader-mode');
-    preview.classList.remove('video-mode');
-    if (indicator) indicator.classList.add('visible');
-    console.log(`Preview ${channel} updated (shader mode)`);
-  } else {
+  // Check if in webcam mode
+  const isWebcamMode = channelSourceMode[channel] === 'cam' && webcamManager && webcamManager.isActive(channel);
+
+  if (isWebcamMode) {
+    // Webcam mode
     preview.classList.remove('shader-mode');
     preview.classList.add('video-mode');
     if (indicator) indicator.classList.remove('visible');
+
+    const webcamVideo = webcamManager.getVideo(channel);
+    if (webcamVideo) {
+      // Remove old videos and add webcam video
+      const oldVideos = preview.querySelectorAll('video');
+      oldVideos.forEach(v => {
+        if (v !== webcamVideo) v.remove();
+      });
+      if (!preview.contains(webcamVideo)) {
+        preview.appendChild(webcamVideo);
+      }
+      webcamVideo.style.cssText = "display:block;width:100%;height:100%;object-fit:cover;";
+    }
+    console.log(`Preview ${channel} updated (webcam mode)`);
+  } else if (videoChannel.currentSourceType === 'shader') {
+    // Shader mode
+    preview.classList.add('shader-mode');
+    preview.classList.remove('video-mode');
+    if (indicator) indicator.classList.add('visible');
+
+    // Remove webcam video if present
+    const webcamVideo = webcamManager ? webcamManager.getVideo(channel) : null;
+    if (webcamVideo && preview.contains(webcamVideo)) {
+      webcamVideo.style.display = 'none';
+    }
+
+    console.log(`Preview ${channel} updated (shader mode)`);
+  } else {
+    // Bank video mode
+    preview.classList.remove('shader-mode');
+    preview.classList.add('video-mode');
+    if (indicator) indicator.classList.remove('visible');
+
+    // Remove webcam video if present
+    const webcamVideo = webcamManager ? webcamManager.getVideo(channel) : null;
+    if (webcamVideo && preview.contains(webcamVideo)) {
+      webcamVideo.remove();
+    }
 
     if (videoChannel && videoChannel.video) {
       if (!preview.contains(videoChannel.video)) {
@@ -855,37 +1024,40 @@ function updateChannelPreview(channel) {
 async function handleShaderDrop(channel, index, file, btn) {
   try {
     const shaderCode = await file.text();
-
-    console.log(`handleShaderDrop: [${channel}] bank=${index + 1}, file=${file.name}, code length=${shaderCode.length}`);
-
-    setShaderSource(channel, index, shaderCode, file.name);
-    videoManager.invalidateShaderCache(channel, index);
-
-    btn.title = file.name;
-    btn.setAttribute('data-name', file.name);
-    btn.classList.remove("custom");
-    btn.classList.add("shader");
-    console.log(`[${channel}] Bank ${index + 1}: Assigned shader "${file.name}"`);
-
-    // Save shader to storage
-    saveShaderCode(channel, index, shaderCode);
-    updateBankSettings(channel, index, { type: 'shader', name: file.name, thumbnail: null });
-
-    broadcastShaderFile(channel, index, shaderCode, file.name);
-
-    if (btn.classList.contains("active")) {
-      console.log(`handleShaderDrop: [${channel}] Bank ${index + 1} is active, switching`);
-
-      const videoChannel = channel === "A" ? videoManager.channelA : videoManager.channelB;
-      videoChannel.currentShaderVersion = -1;
-
-      videoManager.setChannelSource(channel, index);
-      setChannelSource(channel, "shader", index);
-      updateChannelPreview(channel);
-    }
+    handleShaderCode(channel, index, shaderCode, file.name, btn);
   } catch (e) {
     console.error("Failed to load shader:", e);
     alert(`シェーダーの読み込みに失敗しました: ${e.message}`);
+  }
+}
+
+function handleShaderCode(channel, index, shaderCode, fileName, btn) {
+  console.log(`handleShaderCode: [${channel}] bank=${index + 1}, file=${fileName}, code length=${shaderCode.length}`);
+
+  setShaderSource(channel, index, shaderCode, fileName);
+  videoManager.invalidateShaderCache(channel, index);
+
+  btn.title = fileName;
+  btn.setAttribute('data-name', fileName);
+  btn.classList.remove("custom");
+  btn.classList.add("shader");
+  console.log(`[${channel}] Bank ${index + 1}: Assigned shader "${fileName}"`);
+
+  // Save shader to storage
+  saveShaderCode(channel, index, shaderCode);
+  updateBankSettings(channel, index, { type: 'shader', name: fileName, thumbnail: null });
+
+  broadcastShaderFile(channel, index, shaderCode, fileName);
+
+  if (btn.classList.contains("active")) {
+    console.log(`handleShaderCode: [${channel}] Bank ${index + 1} is active, switching`);
+
+    const videoChannel = channel === "A" ? videoManager.channelA : videoManager.channelB;
+    videoChannel.currentShaderVersion = -1;
+
+    videoManager.setChannelSource(channel, index);
+    setChannelSource(channel, "shader", index);
+    updateChannelPreview(channel);
   }
 }
 
@@ -927,37 +1099,43 @@ function updatePlaneSize() {
   const screenHeight = orthoHeight * 2;
   const screenWidth = screenHeight * screenAspect;
 
-  // 実際のテクスチャサイズから動的にアスペクト比を計算
+  // Calculate size for Plane A
   const texA = videoManager.getTextureA();
-  const videoAspect = texA && texA.width && texA.height
+  const aspectA = texA && texA.width && texA.height
     ? (texA.width / texA.height)
     : (16 / 9);
 
-  let width, height;
-
-  // Coverモード: 画面を埋める（黒帯なし）
-  if (screenAspect > videoAspect) {
-    // 画面が映像より横長 → 幅に合わせる
-    width = screenWidth;
-    height = width / videoAspect;
+  let widthA, heightA;
+  if (screenAspect > aspectA) {
+    widthA = screenWidth;
+    heightA = widthA / aspectA;
   } else {
-    // 画面が映像より縦長 → 高さに合わせる
-    height = screenHeight;
-    width = height * videoAspect;
+    heightA = screenHeight;
+    widthA = heightA * aspectA;
   }
+  planeA.setLocalScale(widthA, 1, -heightA);
 
-  planeA.setLocalScale(width, 1, -height);
-  planeB.setLocalScale(width, 1, -height);
+  // Calculate size for Plane B (independent)
+  const texB = videoManager.getTextureB();
+  const aspectB = texB && texB.width && texB.height
+    ? (texB.width / texB.height)
+    : (16 / 9);
+
+  let widthB, heightB;
+  if (screenAspect > aspectB) {
+    widthB = screenWidth;
+    heightB = widthB / aspectB;
+  } else {
+    heightB = screenHeight;
+    widthB = heightB * aspectB;
+  }
+  planeB.setLocalScale(widthB, 1, -heightB);
 
   console.log(
-    "Updated plane size (Cover):",
-    width.toFixed(2),
-    "x",
-    height.toFixed(2),
-    "Screen Aspect:",
-    screenAspect.toFixed(2),
-    "Video Aspect:",
-    videoAspect.toFixed(2)
+    "updatePlaneSize - texA:", texA ? `${texA.width}x${texA.height}` : 'null',
+    "texB:", texB ? `${texB.width}x${texB.height}` : 'null',
+    "=> A:", `${widthA.toFixed(1)}x${heightA.toFixed(1)} (${aspectA.toFixed(2)})`,
+    "B:", `${widthB.toFixed(1)}x${heightB.toFixed(1)} (${aspectB.toFixed(2)})`
   );
 }
 
@@ -970,14 +1148,13 @@ async function initPlayCanvas() {
   });
 
   app.setCanvasFillMode(pc.FILLMODE_NONE);
-  app.setCanvasResolution(pc.RESOLUTION_AUTO);
+  app.setCanvasResolution(pc.RESOLUTION_FIXED, OUTPUT_WIDTH, OUTPUT_HEIGHT);
 
-  function resizeToContainer() {
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-    app.resizeCanvas(width, height);
-    console.log("Canvas resized to container:", width, "x", height);
-  }
+  // captureStream用に固定解像度で描画。CSSでプレビューサイズに縮小表示。
+  app.resizeCanvas(OUTPUT_WIDTH, OUTPUT_HEIGHT);
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  canvas.style.objectFit = 'contain';
 
   const device = app.graphicsDevice;
 
@@ -1062,6 +1239,7 @@ async function initPlayCanvas() {
       const matB = planeB.render.meshInstances[0].material;
       if (matB.emissiveMap !== texB) {
         matB.emissiveMap = texB;
+        updatePlaneSize(); // テクスチャ変更時にサイズ再計算
       }
       matB.opacity = currentCrossfadeValue;
       matB.update();
@@ -1107,13 +1285,7 @@ async function initPlayCanvas() {
 
   app.start();
 
-  resizeToContainer();
   setTimeout(updatePlaneSize, 100);
-
-  window.addEventListener("resize", () => {
-    resizeToContainer();
-    setTimeout(updatePlaneSize, 100);
-  });
 
   setupChannelPreviews();
 }
@@ -1141,6 +1313,163 @@ function setupChannelPreviews() {
   }
 
   console.log("Channel previews setup complete");
+}
+
+/**
+ * Initialize Webcam UI and handlers
+ */
+async function initWebcamUI() {
+  // Check if webcam is supported
+  if (!WebcamManager.isSupported()) {
+    console.warn('[Webcam] Not supported in this browser');
+    disableWebcamButtons('Not supported');
+    return;
+  }
+
+  if (!WebcamManager.isSecureContext()) {
+    console.warn('[Webcam] Requires HTTPS or localhost');
+    disableWebcamButtons('HTTPS required');
+    return;
+  }
+
+  // Initialize webcam manager
+  webcamManager = await initWebcam();
+  if (!webcamManager) {
+    disableWebcamButtons('Init failed');
+    return;
+  }
+
+  // Populate camera dropdowns
+  updateCameraDropdowns(webcamManager.devices);
+
+  // Listen for device changes
+  webcamManager.onDevicesUpdated = (devices) => {
+    updateCameraDropdowns(devices);
+  };
+
+  // Bind source toggle buttons
+  document.querySelectorAll('.source-btn').forEach(btn => {
+    btn.addEventListener('click', () => handleSourceToggle(btn));
+  });
+
+  // Bind camera select dropdowns
+  ['A', 'B'].forEach(channel => {
+    const select = document.getElementById(`camSelect${channel}`);
+    if (select) {
+      select.addEventListener('change', (e) => handleCameraSelect(channel, e.target.value));
+    }
+  });
+
+  console.log('[Webcam] UI initialized');
+}
+
+function disableWebcamButtons(reason) {
+  document.querySelectorAll('.source-btn[data-source="cam"]').forEach(btn => {
+    btn.classList.add('disabled');
+    btn.title = reason;
+    btn.disabled = true;
+  });
+}
+
+function updateCameraDropdowns(devices) {
+  ['A', 'B'].forEach(channel => {
+    const select = document.getElementById(`camSelect${channel}`);
+    if (!select) return;
+
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">-- Camera --</option>';
+
+    devices.forEach(device => {
+      const option = document.createElement('option');
+      option.value = device.deviceId;
+      option.textContent = device.label;
+      select.appendChild(option);
+    });
+
+    // Restore selection if still available
+    if (currentValue && devices.some(d => d.deviceId === currentValue)) {
+      select.value = currentValue;
+    }
+  });
+}
+
+async function handleSourceToggle(btn) {
+  if (btn.disabled) return;
+
+  const channel = btn.dataset.channel;
+  const source = btn.dataset.source;
+
+  // Update button states
+  const toggleContainer = btn.parentElement;
+  toggleContainer.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  // Show/hide camera select dropdown
+  const camSelectRow = document.getElementById(`camSelectRow${channel}`);
+
+  if (source === 'media') {
+    if (camSelectRow) camSelectRow.style.display = 'none';
+
+    // Stop webcam if active
+    if (webcamManager && webcamManager.isActive(channel)) {
+      webcamManager.stop(channel);
+    }
+
+    // Clear webcam source and restore bank video
+    videoManager.clearWebcamSource(channel);
+    channelSourceMode[channel] = 'media';
+
+    // Restore active bank video
+    const buttons = document.querySelectorAll(`#bank${channel} .bank-btn`);
+    const activeBtn = Array.from(buttons).find(b => b.classList.contains('active'));
+    if (activeBtn) {
+      const index = parseInt(activeBtn.dataset.index);
+      videoManager.setChannelSource(channel, index);
+    }
+    updateChannelPreview(channel);
+
+    console.log(`[${channel}] Switched to Media mode`);
+  } else {
+    if (camSelectRow) camSelectRow.style.display = '';
+
+    channelSourceMode[channel] = 'cam';
+
+    // Start camera if one is selected
+    const select = document.getElementById(`camSelect${channel}`);
+    if (select && select.value) {
+      await handleCameraSelect(channel, select.value);
+    }
+
+    console.log(`[${channel}] Switched to Camera mode`);
+  }
+}
+
+async function handleCameraSelect(channel, deviceId) {
+  if (!webcamManager) return;
+
+  if (!deviceId) {
+    webcamManager.stop(channel);
+    videoManager.clearWebcamSource(channel);
+    updateChannelPreview(channel);
+    console.log(`[${channel}] Camera stopped`);
+    return;
+  }
+
+  console.log(`[${channel}] Starting camera...`);
+
+  const result = await webcamManager.start(channel, deviceId);
+
+  if (result.success) {
+    // Connect webcam video to videoManager
+    const video = webcamManager.getVideo(channel);
+    videoManager.setWebcamSource(channel, video);
+    updateChannelPreview(channel);
+
+    console.log(`[${channel}] Camera started: ${result.label} (${result.width}x${result.height})`);
+  } else {
+    console.error(`[${channel}] Camera error: ${result.error}`);
+    alert(`Camera error: ${result.error}`);
+  }
 }
 
 init();

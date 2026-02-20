@@ -18,11 +18,13 @@
   <header>
     <h1>VizMix マニュアル</h1>
     <p class="tagline">Browser-based VJ Software</p>
-    <p class="version">Version 0.6.0</p>
+    <p class="version">Version 0.8.0</p>
     <nav>
       <a href="#about">VizMixとは</a>
       <a href="#install">インストール</a>
       <a href="#basic">基本操作</a>
+      <a href="#mediabrowser">メディアブラウザ</a>
+      <a href="#webcam">Webcam</a>
       <a href="#keyboard">キーボード</a>
       <a href="#bpm">BPM機能</a>
       <a href="#effects">エフェクト</a>
@@ -65,7 +67,7 @@
       <ol>
         <li>ZIPファイルをダウンロードして解凍</li>
         <li>コマンドプロンプト/ターミナルを開く</li>
-        <li>解凍したフォルダに移動: <code>cd VizMix-v0.6.0</code></li>
+        <li>解凍したフォルダに移動: <code>cd VizMix-v0.8.0</code></li>
         <li>サーバーを起動: <code>python -m http.server 8000</code></li>
         <li>ブラウザで <code>http://localhost:8000</code> にアクセス</li>
       </ol>
@@ -74,7 +76,7 @@
       <ol>
         <li>ZIPファイルをダウンロードして解凍</li>
         <li>コマンドプロンプト/ターミナルを開く</li>
-        <li>解凍したフォルダに移動: <code>cd VizMix-v0.6.0</code></li>
+        <li>解凍したフォルダに移動: <code>cd VizMix-v0.8.0</code></li>
         <li>サーバーを起動: <code>npx serve</code></li>
         <li>表示されたURLにアクセス</li>
       </ol>
@@ -106,6 +108,7 @@
         <li>バンクボタンをクリックして映像を切り替え</li>
       </ol>
       <p class="note">対応形式: MP4 (H.264)、WebM (VP8/VP9)。MP4を推奨します。</p>
+      <p class="note">※ v0.7.0よりSpeedコントロール（逆再生等）は非表示になりました。</p>
 
       <h3>シェーダーの読み込み</h3>
       <ol>
@@ -123,6 +126,67 @@
 
       <h3>Output Window</h3>
       <p>「Open Output」ボタンで出力用ウィンドウを開きます。プロジェクターやLEDに接続するモニターに移動してフルスクリーンにしてください。</p>
+    </section>
+
+    <section id="mediabrowser">
+      <h2>メディアブラウザ</h2>
+      <p>Bank A / Bank B の横にメディアブラウザパネルがあります。フォルダ内の映像を一覧表示し、簡単にバンクへ割り当てできます。</p>
+
+      <h3>フォルダの選択</h3>
+      <ol>
+        <li>「Select Folder」ボタンをクリック</li>
+        <li>映像ファイルが入っているフォルダを選択</li>
+        <li>フォルダ内の対応ファイルがサムネイル表示されます</li>
+      </ol>
+
+      <h3>表示切替</h3>
+      <ul>
+        <li><strong>グリッド表示</strong>: サムネイルを格子状に表示</li>
+        <li><strong>リスト表示</strong>: ファイル名とサムネイルを縦に表示</li>
+      </ul>
+      <p>パネル右上のアイコンで切り替えできます。</p>
+
+      <h3>バンクへの割り当て</h3>
+      <ol>
+        <li>メディアブラウザのサムネイルをドラッグ</li>
+        <li>割り当てたいバンクボタンにドロップ</li>
+        <li>映像が読み込まれ、バンクに登録されます</li>
+      </ol>
+
+      <h3>対応フォーマット</h3>
+      <ul>
+        <li>MP4 (H.264) - 推奨</li>
+        <li>WebM</li>
+      </ul>
+    </section>
+
+    <section id="webcam">
+      <h2>Webcam</h2>
+      <p>Channel A / Channel B のプレビュー下にある Media / Cam 切替ボタンでカメラ入力に切り替えられます。</p>
+
+      <h3>基本操作</h3>
+      <ul>
+        <li><strong>Media / Cam ボタン</strong>: クリックで Media モードと Cam モードを切り替え</li>
+        <li><strong>Cam モード</strong>: カメラ映像をリアルタイム表示</li>
+        <li><strong>Media モード</strong>: 通常のバンク映像を表示</li>
+      </ul>
+
+      <h3>複数カメラ対応</h3>
+      <ul>
+        <li>ドロップダウンメニューから使用するカメラを選択</li>
+        <li>Channel A と Channel B で異なるカメラを選択可能</li>
+        <li>OBS仮想カメラなども使用可能</li>
+      </ul>
+
+      <h3>エフェクト適用</h3>
+      <p>VIDEO EFFECTSやクロスフェーダーはカメラ映像にも適用されます。メディア映像と同じようにエフェクトをかけることができます。</p>
+
+      <h3>注意事項</h3>
+      <ul>
+        <li>HTTPS または localhost 環境が必要です</li>
+        <li>初回使用時にブラウザがカメラへのアクセス許可を求めます</li>
+        <li>カメラが認識されない場合はページを再読み込みしてください</li>
+      </ul>
     </section>
 
     <section id="keyboard">
@@ -331,7 +395,7 @@
 
   <footer>
     <p><a href="../../">← VizMixに戻る</a></p>
-    <p>VizMix v0.6.0 | <a href="../en/">English</a></p>
+    <p>VizMix v0.8.0 | <a href="../en/">English</a></p>
   </footer>
 </body>
 </html>
