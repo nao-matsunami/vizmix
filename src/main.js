@@ -38,6 +38,10 @@ import {
   setBlurAmount,
   setBrightnessAmount,
   setContrastAmount,
+  setGlitchAmount,
+  setRgbShiftAmount,
+  setRgbMultiplyAmount,
+  setRgbMultiplyColor,
   resetEffect,
   getEffectParams,
 } from "./effects.js";
@@ -63,7 +67,7 @@ import {
   clearSettings,
 } from "./storage.js";
 import { initKeyboard, getShortcutList } from "./keyboard.js";
-import { initMidi, getMidiDevices } from "./midi.js";
+import { initMidi, getMidiDevices, toggleLearnMode, clearAllLearnMappings, registerLearnableTarget } from "./midi.js";
 import { initEffectsUI as initEffectsPanelUI, syncEffectsUI, handleEffectShortcut, hideEffectParams } from './effectsUI.js';
 import { initMediaBrowsers } from './mediaBrowser.js';
 import { initWebcam, getWebcamManager, WebcamManager } from './webcam.js';
@@ -122,6 +126,14 @@ let materialB = null;
 let camera = null;
 let textureUpdateLogged = false;
 let currentCrossfadeValue = 0;
+let dimmerA = 1.0;
+let dimmerB = 1.0;
+
+// BPM Flash state
+let flashEnabled = false;
+let flashDivisor = 4; // 1/4 beat pattern
+let flashOpacity = 0;
+let flashOverlay = null;
 
 // Auto-switch state
 let autoSwitchToB = true; // true: switch to B, false: switch to A
@@ -210,7 +222,27 @@ async function init() {
   setTimeout(() => generateDefaultThumbnails(), 500);
 
   // Media Browser 初期化
-  initMediaBrowsers();
+  const mediaBrowsers = initMediaBrowsers();
+  // ダブルクリックでアクティブBankにアサイン
+  const handleMediaDoubleClick = (mediaInfo) => {
+    const channel = mediaInfo.channel;
+    // アクティブなBankボタンのインデックスを取得
+    const container = document.getElementById(`bank${channel}`);
+    if (!container) return;
+    const activeBtn = container.querySelector('.bank-btn.active');
+    if (!activeBtn) return;
+    const index = parseInt(activeBtn.dataset.index, 10);
+    // ドロップと同じ処理をシミュレート
+    const fakeDropData = {
+      name: mediaInfo.name,
+      type: mediaInfo.type,
+      mediaType: mediaInfo.mediaType,
+      blobUrl: mediaInfo.blobUrl,
+    };
+    assignMediaToBank(channel, index, fakeDropData);
+  };
+  if (mediaBrowsers.A) mediaBrowsers.A.onDoubleClickAssign = handleMediaDoubleClick;
+  if (mediaBrowsers.B) mediaBrowsers.B.onDoubleClickAssign = handleMediaDoubleClick;
   console.log("Media Browsers initialized");
 
   // Webcam 初期化
@@ -315,6 +347,27 @@ function initUI() {
     updateCrossfade(parseInt(e.target.value));
   });
 
+  // Dimmer faders
+  const dimmerASlider = document.getElementById('dimmerA');
+  const dimmerBSlider = document.getElementById('dimmerB');
+  const dimmerAValue = document.getElementById('dimmerAValue');
+  const dimmerBValue = document.getElementById('dimmerBValue');
+  if (dimmerASlider) {
+    dimmerASlider.addEventListener('input', (e) => {
+      dimmerA = parseInt(e.target.value) / 100;
+      if (dimmerAValue) dimmerAValue.textContent = e.target.value;
+    });
+  }
+  if (dimmerBSlider) {
+    dimmerBSlider.addEventListener('input', (e) => {
+      dimmerB = parseInt(e.target.value) / 100;
+      if (dimmerBValue) dimmerBValue.textContent = e.target.value;
+    });
+  }
+
+  // Playback controls
+  initPlaybackControls();
+
   createBankButtons("bankA", "A");
   createBankButtons("bankB", "B");
 
@@ -355,6 +408,83 @@ function initChannelControllers() {
   });
 
   console.log('Channel controllers initialized');
+}
+
+// ── Playback Controls ──────────────────────────────────────────────────────
+const seekDragging = { A: false, B: false };
+
+function initPlaybackControls() {
+  ['A', 'B'].forEach(ch => {
+    const btn = document.querySelector(`.play-pause-toggle[data-channel="${ch}"]`);
+    const seekBar = document.getElementById(`seekBar${ch}`);
+
+    if (btn) {
+      btn.addEventListener('click', () => {
+        const vc = ch === 'A' ? videoManager.channelA : videoManager.channelB;
+        if (vc.currentSourceType === 'shader') return;
+        const video = vc.video;
+        if (!video) return;
+        if (video.paused) {
+          vc.playbackState = 'play';
+          video.play().catch(() => {});
+          btn.textContent = '||';
+          btn.classList.remove('paused');
+        } else {
+          vc.playbackState = 'pause';
+          video.pause();
+          btn.textContent = '\u25B6';
+          btn.classList.add('paused');
+        }
+      });
+    }
+
+    if (seekBar) {
+      seekBar.addEventListener('mousedown', () => { seekDragging[ch] = true; });
+      seekBar.addEventListener('touchstart', () => { seekDragging[ch] = true; });
+      seekBar.addEventListener('input', () => {
+        const vc = ch === 'A' ? videoManager.channelA : videoManager.channelB;
+        if (vc.currentSourceType === 'shader') return;
+        const video = vc.video;
+        if (!video || !video.duration) return;
+        video.currentTime = (parseFloat(seekBar.value) / 100) * video.duration;
+      });
+      seekBar.addEventListener('mouseup', () => { seekDragging[ch] = false; });
+      seekBar.addEventListener('touchend', () => { seekDragging[ch] = false; });
+    }
+  });
+}
+
+function updatePlaybackUI() {
+  ['A', 'B'].forEach(ch => {
+    const vc = ch === 'A' ? videoManager.channelA : videoManager.channelB;
+    const container = document.getElementById(`playback${ch}`);
+    if (!container) return;
+
+    // ISFシェーダーの場合はシークバー非表示
+    if (vc.currentSourceType === 'shader') {
+      container.style.visibility = 'hidden';
+      return;
+    }
+    container.style.visibility = 'visible';
+
+    const video = vc.video;
+    if (!video || !video.duration || isNaN(video.duration)) return;
+
+    if (!seekDragging[ch]) {
+      const seekBar = document.getElementById(`seekBar${ch}`);
+      if (seekBar) {
+        seekBar.value = (video.currentTime / video.duration) * 100;
+      }
+    }
+
+    const timeEl = document.getElementById(`seekTime${ch}`);
+    if (timeEl) {
+      const t = Math.floor(video.currentTime);
+      const m = Math.floor(t / 60);
+      const s = t % 60;
+      timeEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+    }
+  });
 }
 
 function initBPMControls() {
@@ -438,10 +568,28 @@ function initBPMControls() {
     });
   }
 
+  // BPM Flash controls
+  const flashToggle = document.getElementById('flashToggle');
+  const flashPattern = document.getElementById('flashPattern');
+  if (flashToggle) {
+    flashToggle.addEventListener('click', () => {
+      flashEnabled = !flashEnabled;
+      flashToggle.classList.toggle('active', flashEnabled);
+      if (!flashEnabled) flashOpacity = 0;
+    });
+  }
+  if (flashPattern) {
+    flashPattern.addEventListener('change', (e) => {
+      flashDivisor = parseInt(e.target.value);
+    });
+  }
+
   // Start beat loop
   startBeatLoop(onBeat, onAutoSwitch);
   console.log("BPM controls initialized");
 }
+
+let totalBeatCount = 0;
 
 function onBeat(beatCount) {
   // Update beat indicators
@@ -450,6 +598,12 @@ function onBeat(beatCount) {
     if (dot) {
       dot.classList.toggle("active", i === beatCount);
     }
+  }
+
+  // BPM Flash
+  totalBeatCount++;
+  if (flashEnabled && totalBeatCount % flashDivisor === 0) {
+    flashOpacity = 1.0;
   }
 
   // Broadcast beat to output window
@@ -700,6 +854,27 @@ function initKeyboardShortcuts() {
   });
 }
 
+// Glitchエフェクト用オーバーレイcanvas
+let glitchOverlay = null;
+let glitchCtx = null;
+
+function ensureGlitchOverlay() {
+  const masterCanvas = document.getElementById('canvasMaster');
+  if (!masterCanvas) return null;
+  if (!glitchOverlay) {
+    glitchOverlay = document.createElement('canvas');
+    glitchOverlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;';
+    masterCanvas.parentElement.appendChild(glitchOverlay);
+    glitchCtx = glitchOverlay.getContext('2d', { willReadFrequently: true });
+  }
+  // サイズ同期
+  if (glitchOverlay.width !== masterCanvas.width || glitchOverlay.height !== masterCanvas.height) {
+    glitchOverlay.width = masterCanvas.width;
+    glitchOverlay.height = masterCanvas.height;
+  }
+  return glitchCtx;
+}
+
 // Master Outputにエフェクトを適用
 function applyEffectsToCanvas() {
   const canvas = document.getElementById('canvasMaster');
@@ -717,6 +892,86 @@ function applyEffectsToCanvas() {
   if (params.contrast !== 0) filters.push(`contrast(${1 + params.contrast})`);
 
   canvas.style.filter = filters.length > 0 ? filters.join(' ') : 'none';
+
+  // Glitch系エフェクト（Canvas 2Dオーバーレイ）
+  const needsGlitch = params.glitch > 0 || params.rgbShift > 0 || params.rgbMultiply > 0;
+  if (needsGlitch) {
+    const ctx = ensureGlitchOverlay();
+    if (!ctx) return;
+    const w = glitchOverlay.width;
+    const h = glitchOverlay.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // RGB Shift: draw the source with offset channels
+    if (params.rgbShift > 0) {
+      const shift = Math.round(params.rgbShift * w * 0.02);
+      ctx.globalCompositeOperation = 'source-over';
+      // Red channel (shifted right)
+      ctx.drawImage(canvas, 0, 0, w, h);
+      const imgData = ctx.getImageData(0, 0, w, h);
+      const srcData = ctx.getImageData(0, 0, w, h);
+      const d = imgData.data;
+      const s = srcData.data;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = (y * w + x) * 4;
+          // Red from shifted position
+          const rx = Math.min(w - 1, Math.max(0, x + shift));
+          const rIdx = (y * w + rx) * 4;
+          d[idx] = s[rIdx]; // R
+          // Green stays
+          d[idx + 1] = s[idx + 1]; // G
+          // Blue from opposite shift
+          const bx = Math.min(w - 1, Math.max(0, x - shift));
+          const bIdx = (y * w + bx) * 4;
+          d[idx + 2] = s[bIdx + 2]; // B
+          d[idx + 3] = 255;
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+
+    // Glitch: horizontal slice displacement
+    if (params.glitch > 0) {
+      if (params.rgbShift <= 0) {
+        ctx.drawImage(canvas, 0, 0, w, h);
+      }
+      const imgData = ctx.getImageData(0, 0, w, h);
+      const clone = new Uint8ClampedArray(imgData.data);
+      const sliceCount = Math.floor(params.glitch * 20) + 1;
+      const t = performance.now() * 0.001;
+      for (let s = 0; s < sliceCount; s++) {
+        const sliceY = Math.floor(Math.abs(Math.sin(t * 3.7 + s * 1.3)) * h);
+        const sliceH = Math.floor(Math.abs(Math.sin(t * 5.1 + s * 2.1)) * 20) + 2;
+        const offset = Math.floor((Math.sin(t * 10.0 + s * 7.3) * params.glitch * w * 0.1));
+        for (let y = sliceY; y < Math.min(h, sliceY + sliceH); y++) {
+          for (let x = 0; x < w; x++) {
+            const srcX = Math.min(w - 1, Math.max(0, x - offset));
+            const dstIdx = (y * w + x) * 4;
+            const srcIdx = (y * w + srcX) * 4;
+            imgData.data[dstIdx] = clone[srcIdx];
+            imgData.data[dstIdx + 1] = clone[srcIdx + 1];
+            imgData.data[dstIdx + 2] = clone[srcIdx + 2];
+          }
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+
+    // RGB Multiply: tint overlay
+    if (params.rgbMultiply > 0) {
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha = params.rgbMultiply;
+      ctx.fillStyle = params.rgbMultiplyColor;
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalAlpha = 1.0;
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    glitchOverlay.style.display = 'block';
+  } else if (glitchOverlay) {
+    glitchOverlay.style.display = 'none';
+  }
 }
 
 function selectBank(channel, index) {
@@ -774,6 +1029,20 @@ async function initMidiController() {
         slider.dispatchEvent(new Event('input'));
       }
     },
+    dimmerA: (value) => {
+      dimmerA = value / 100;
+      const slider = document.getElementById('dimmerA');
+      const valEl = document.getElementById('dimmerAValue');
+      if (slider) slider.value = value;
+      if (valEl) valEl.textContent = value;
+    },
+    dimmerB: (value) => {
+      dimmerB = value / 100;
+      const slider = document.getElementById('dimmerB');
+      const valEl = document.getElementById('dimmerBValue');
+      if (slider) slider.value = value;
+      if (valEl) valEl.textContent = value;
+    },
     bpm: (value) => {
       const newBpm = setBPM(value);
       const bpmInput = document.getElementById('bpmInput');
@@ -791,6 +1060,12 @@ async function initMidiController() {
         cb.checked = !cb.checked;
         cb.dispatchEvent(new Event('change'));
       }
+    },
+    flashToggle: () => {
+      flashEnabled = !flashEnabled;
+      const btn = document.getElementById('flashToggle');
+      if (btn) btn.classList.toggle('active', flashEnabled);
+      if (!flashEnabled) flashOpacity = 0;
     },
 
     fxInvert: () => {
@@ -823,6 +1098,21 @@ async function initMidiController() {
       broadcastEffectsState();
       syncEffectsUI(effectsState);
     },
+    fxGlitch: (value) => {
+      setGlitchAmount(value);
+      broadcastEffectsState();
+      syncEffectsUI(effectsState);
+    },
+    fxRgbShift: (value) => {
+      setRgbShiftAmount(value);
+      broadcastEffectsState();
+      syncEffectsUI(effectsState);
+    },
+    fxRgbMultiply: (value) => {
+      setRgbMultiplyAmount(value);
+      broadcastEffectsState();
+      syncEffectsUI(effectsState);
+    },
   });
 
   if (success) {
@@ -839,6 +1129,41 @@ async function initMidiController() {
     console.log('MIDI not available');
     const el = document.getElementById('midiDevices');
     if (el) el.innerHTML = '<span class="no-devices">Not supported</span>';
+  }
+
+  // Register learnable targets
+  registerLearnableTarget('crossfade', document.getElementById('crossfader'), 'slider', [0, 100]);
+  registerLearnableTarget('dimmerA', document.getElementById('dimmerA'), 'slider', [0, 100]);
+  registerLearnableTarget('dimmerB', document.getElementById('dimmerB'), 'slider', [0, 100]);
+  registerLearnableTarget('fxBlur', document.querySelector('[data-effect="blur"]'), 'slider', [0, 100]);
+  registerLearnableTarget('fxBrightness', document.querySelector('[data-effect="brightness"]'), 'slider', [-100, 100]);
+  registerLearnableTarget('fxContrast', document.querySelector('[data-effect="contrast"]'), 'slider', [-100, 100]);
+  registerLearnableTarget('fxGlitch', document.querySelector('[data-effect="glitch"]'), 'slider', [0, 100]);
+  registerLearnableTarget('fxRgbShift', document.querySelector('[data-effect="rgbShift"]'), 'slider', [0, 100]);
+  registerLearnableTarget('fxRgbMultiply', document.querySelector('[data-effect="rgbMultiply"]'), 'slider', [0, 100]);
+  registerLearnableTarget('fxInvert', document.querySelector('[data-effect="invert"]'), 'button');
+  registerLearnableTarget('fxGrayscale', document.querySelector('[data-effect="grayscale"]'), 'button');
+  registerLearnableTarget('fxSepia', document.querySelector('[data-effect="sepia"]'), 'button');
+  registerLearnableTarget('flashToggle', document.getElementById('flashToggle'), 'button');
+  registerLearnableTarget('autoSwitchToggle', document.getElementById('autoSwitch'), 'button');
+
+  // MIDI Learn button
+  const learnBtn = document.getElementById('midiLearnBtn');
+  if (learnBtn) {
+    learnBtn.addEventListener('click', () => {
+      const active = toggleLearnMode();
+      learnBtn.classList.toggle('active', active);
+    });
+  }
+
+  // MIDI Clear button
+  const clearBtn = document.getElementById('midiClearBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      if (confirm('Clear all MIDI Learn mappings?')) {
+        clearAllLearnMappings();
+      }
+    });
   }
 }
 
@@ -1226,6 +1551,64 @@ function handleShaderCode(channel, index, shaderCode, fileName, btn) {
   }
 }
 
+/**
+ * メディアをBankにアサインする共通関数（ドロップ & ダブルクリック共用）
+ */
+async function assignMediaToBank(channel, index, media) {
+  const container = document.getElementById(`bank${channel}`);
+  if (!container) return;
+  const btn = container.querySelectorAll('.bank-btn')[index];
+  if (!btn) return;
+
+  if (media.mediaType === 'video') {
+    // 4K以上の映像をブロック
+    const res = await getVideoResolution(media.blobUrl);
+    if (res && res.width > 1920) {
+      alert("この映像は4K以上の解像度です。パフォーマンスの問題があるため、1080p以下の映像を使用してください。");
+      return;
+    }
+    setVideoSource(channel, index, media.blobUrl, media.name, media.type);
+    btn.title = media.name;
+    btn.classList.remove("shader");
+    btn.classList.add("custom");
+
+    try {
+      const thumbnail = await generateVideoThumbnail(media.blobUrl);
+      setButtonThumbnail(btn, thumbnail);
+      updateBankSettings(channel, index, { type: 'video', thumbnail, name: media.name });
+    } catch (err) {
+      console.warn("Failed to generate thumbnail:", err);
+      updateBankSettings(channel, index, { type: 'video', thumbnail: null, name: media.name });
+    }
+
+    try {
+      const response = await fetch(media.blobUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      broadcastVideoFile(channel, index, arrayBuffer, media.type, media.name);
+    } catch (err) {
+      console.warn("Failed to broadcast video to Output:", err);
+    }
+
+    if (btn.classList.contains("active")) {
+      const videoChannel = channel === "A" ? videoManager.channelA : videoManager.channelB;
+      videoChannel.currentIndex = -1;
+      videoManager.setChannelSource(channel, index);
+      setChannelSource(channel, "video", index);
+      updateChannelPreview(channel);
+    }
+  } else if (media.mediaType === 'shader') {
+    try {
+      const response = await fetch(media.blobUrl);
+      const shaderCode = await response.text();
+      handleShaderCode(channel, index, shaderCode, media.name, btn);
+    } catch (err) {
+      console.error("Failed to load shader:", err);
+    }
+  }
+
+  console.log(`[${channel}] Bank ${index + 1}: Assigned "${media.name}" via double-click/drop`);
+}
+
 function updatePreviewBorders(value) {
   const previewA = document.getElementById("previewA");
   const previewB = document.getElementById("previewB");
@@ -1406,7 +1789,7 @@ async function initPlayCanvas() {
         matA.emissiveMap = texA;
         updatePlaneSize(); // テクスチャ変更時にサイズ再計算
       }
-      matA.opacity = 1.0 - currentCrossfadeValue;
+      matA.opacity = (1.0 - currentCrossfadeValue) * dimmerA;
       matA.update();
     }
 
@@ -1416,7 +1799,7 @@ async function initPlayCanvas() {
         matB.emissiveMap = texB;
         updatePlaneSize(); // テクスチャ変更時にサイズ再計算
       }
-      matB.opacity = currentCrossfadeValue;
+      matB.opacity = currentCrossfadeValue * dimmerB;
       matB.update();
     }
 
@@ -1456,6 +1839,23 @@ async function initPlayCanvas() {
 
     // エフェクト適用
     applyEffectsToCanvas();
+
+    // 再生コントロールUI更新
+    updatePlaybackUI();
+
+    // BPM Flash overlay
+    if (flashOpacity > 0) {
+      if (!flashOverlay) {
+        flashOverlay = document.createElement('div');
+        flashOverlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:#fff;pointer-events:none;';
+        document.getElementById('previewMaster').appendChild(flashOverlay);
+      }
+      flashOverlay.style.opacity = flashOpacity;
+      flashOverlay.style.display = 'block';
+      flashOpacity = Math.max(0, flashOpacity - dt * 20);
+    } else if (flashOverlay) {
+      flashOverlay.style.display = 'none';
+    }
   });
 
   app.start();

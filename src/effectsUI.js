@@ -56,11 +56,48 @@ const effectDefinitions = {
     params: [
       { name: 'Amount', key: 'amount', min: -100, max: 100, default: 0, unit: '' }
     ]
+  },
+  glitch: {
+    name: 'Glitch',
+    category: 'Glitch',
+    shortcut: 'F7',
+    type: 'continuous',
+    params: [
+      { name: 'Amount', key: 'amount', min: 0, max: 100, default: 0, unit: '%' }
+    ]
+  },
+  rgbShift: {
+    name: 'RGB Shift',
+    category: 'Glitch',
+    shortcut: 'F8',
+    type: 'continuous',
+    params: [
+      { name: 'Amount', key: 'amount', min: 0, max: 100, default: 0, unit: '%' }
+    ]
+  },
+  rgbMultiply: {
+    name: 'RGB Multiply',
+    category: 'Glitch',
+    shortcut: 'F9',
+    type: 'continuous',
+    params: [
+      { name: 'Amount', key: 'amount', min: 0, max: 100, default: 0, unit: '%' },
+      { name: 'Color', key: 'color', type: 'color', default: '#FF0000' }
+    ]
   }
 };
 
+const rgbMultiplyPresets = [
+  { label: 'R', color: '#FF0000' },
+  { label: 'G', color: '#00FF00' },
+  { label: 'B', color: '#0000FF' },
+  { label: 'C', color: '#00FFFF' },
+  { label: 'M', color: '#FF00FF' },
+  { label: 'Y', color: '#FFFF00' },
+];
+
 // カテゴリ順序
-const categoryOrder = ['Color', 'Adjust', 'Blur'];
+const categoryOrder = ['Color', 'Adjust', 'Blur', 'Glitch'];
 
 let currentEffectsState = null;
 let onEffectChangeCallback = null;
@@ -196,17 +233,29 @@ function showEffectParams(effectKey) {
   // パラメータスライダー
   def.params.forEach(param => {
     const currentValue = state[param.key] ?? param.default;
-    html += `
-      <div class="param-row">
-        <span class="param-label">${param.name}</span>
-        <input type="range" class="param-slider"
-               id="param-${param.key}"
-               min="${param.min}" max="${param.max}" value="${currentValue}">
-        <span class="param-value" id="param-${param.key}-value">
-          ${currentValue}${param.unit}
-        </span>
-      </div>
-    `;
+    if (param.type === 'color') {
+      html += `
+        <div class="param-row">
+          <span class="param-label">${param.name}</span>
+          <input type="color" id="param-${param.key}" value="${currentValue}" style="width:32px;height:24px;border:none;background:none;cursor:pointer;">
+          <div class="color-presets" style="display:flex;gap:3px;margin-left:8px;">
+            ${rgbMultiplyPresets.map(p => `<button class="color-preset-btn" data-color="${p.color}" style="width:22px;height:22px;background:${p.color};border:1px solid #555;border-radius:3px;cursor:pointer;font-size:8px;color:#fff;line-height:22px;text-align:center;">${p.label}</button>`).join('')}
+          </div>
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="param-row">
+          <span class="param-label">${param.name}</span>
+          <input type="range" class="param-slider"
+                 id="param-${param.key}"
+                 min="${param.min}" max="${param.max}" value="${currentValue}">
+          <span class="param-value" id="param-${param.key}-value">
+            ${currentValue}${param.unit}
+          </span>
+        </div>
+      `;
+    }
   });
 
   html += `<div class="param-shortcut">Shortcut: <kbd>${def.shortcut}</kbd></div>`;
@@ -236,16 +285,34 @@ function bindParamEvents(effectKey, def) {
     });
   }
 
-  // スライダー
+  // スライダー & カラーピッカー
   def.params.forEach(param => {
-    const slider = document.getElementById(`param-${param.key}`);
-    const valueEl = document.getElementById(`param-${param.key}-value`);
-    if (slider && valueEl) {
-      slider.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        valueEl.textContent = `${val}${param.unit}`;
-        updateEffect(effectKey, param.key, val);
+    if (param.type === 'color') {
+      const colorInput = document.getElementById(`param-${param.key}`);
+      if (colorInput) {
+        colorInput.addEventListener('input', (e) => {
+          updateEffect(effectKey, param.key, e.target.value);
+        });
+      }
+      // Color preset buttons
+      const presetBtns = document.querySelectorAll('.color-preset-btn');
+      presetBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const color = btn.dataset.color;
+          if (colorInput) colorInput.value = color;
+          updateEffect(effectKey, param.key, color);
+        });
       });
+    } else {
+      const slider = document.getElementById(`param-${param.key}`);
+      const valueEl = document.getElementById(`param-${param.key}-value`);
+      if (slider && valueEl) {
+        slider.addEventListener('input', (e) => {
+          const val = parseFloat(e.target.value);
+          valueEl.textContent = `${val}${param.unit}`;
+          updateEffect(effectKey, param.key, val);
+        });
+      }
     }
   });
 }
@@ -263,14 +330,21 @@ function updateParamPanel(effectKey) {
     enabledEl.checked = state.enabled ?? false;
   }
 
-  // スライダー更新
+  // スライダー & カラー更新
   def.params.forEach(param => {
-    const slider = document.getElementById(`param-${param.key}`);
-    const valueEl = document.getElementById(`param-${param.key}-value`);
-    if (slider && valueEl) {
-      const val = state[param.key] ?? param.default;
-      slider.value = val;
-      valueEl.textContent = `${val}${param.unit}`;
+    if (param.type === 'color') {
+      const colorInput = document.getElementById(`param-${param.key}`);
+      if (colorInput) {
+        colorInput.value = state[param.key] ?? param.default;
+      }
+    } else {
+      const slider = document.getElementById(`param-${param.key}`);
+      const valueEl = document.getElementById(`param-${param.key}-value`);
+      if (slider && valueEl) {
+        const val = state[param.key] ?? param.default;
+        slider.value = val;
+        valueEl.textContent = `${val}${param.unit}`;
+      }
     }
   });
 }
@@ -344,7 +418,10 @@ export function handleEffectShortcut(key) {
     'F3': 'sepia',
     'F4': 'blur',
     'F5': 'brightness',
-    'F6': 'contrast'
+    'F6': 'contrast',
+    'F7': 'glitch',
+    'F8': 'rgbShift',
+    'F9': 'rgbMultiply'
   };
 
   const effectKey = mapping[key];

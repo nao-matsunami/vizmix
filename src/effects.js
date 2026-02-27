@@ -11,6 +11,9 @@ export const effectsState = {
   blur: { amount: 0 },                         // 0-100
   brightness: { amount: 0 },                   // -100 to +100
   contrast: { amount: 0 },                     // -100 to +100
+  glitch: { amount: 0 },                       // 0-100
+  rgbShift: { amount: 0 },                     // 0-100
+  rgbMultiply: { amount: 0, color: '#FF0000' }, // 0-100, hex color
 };
 
 // トグル（Invert）
@@ -63,6 +66,26 @@ export function setContrastAmount(value) {
   return effectsState.contrast.amount;
 }
 
+export function setGlitchAmount(value) {
+  effectsState.glitch.amount = Math.max(0, Math.min(100, value));
+  return effectsState.glitch.amount;
+}
+
+export function setRgbShiftAmount(value) {
+  effectsState.rgbShift.amount = Math.max(0, Math.min(100, value));
+  return effectsState.rgbShift.amount;
+}
+
+export function setRgbMultiplyAmount(value) {
+  effectsState.rgbMultiply.amount = Math.max(0, Math.min(100, value));
+  return effectsState.rgbMultiply.amount;
+}
+
+export function setRgbMultiplyColor(color) {
+  effectsState.rgbMultiply.color = color;
+  return effectsState.rgbMultiply.color;
+}
+
 // リセット
 export function resetEffect(effectName) {
   switch (effectName) {
@@ -86,6 +109,16 @@ export function resetEffect(effectName) {
     case 'contrast':
       effectsState.contrast.amount = 0;
       break;
+    case 'glitch':
+      effectsState.glitch.amount = 0;
+      break;
+    case 'rgbShift':
+      effectsState.rgbShift.amount = 0;
+      break;
+    case 'rgbMultiply':
+      effectsState.rgbMultiply.amount = 0;
+      effectsState.rgbMultiply.color = '#FF0000';
+      break;
   }
 }
 
@@ -98,6 +131,10 @@ export function resetAllEffects() {
   effectsState.blur.amount = 0;
   effectsState.brightness.amount = 0;
   effectsState.contrast.amount = 0;
+  effectsState.glitch.amount = 0;
+  effectsState.rgbShift.amount = 0;
+  effectsState.rgbMultiply.amount = 0;
+  effectsState.rgbMultiply.color = '#FF0000';
 }
 
 // エフェクトパラメータをシェーダー用に取得
@@ -109,6 +146,10 @@ export function getEffectParams() {
     blur: effectsState.blur.amount / 100,
     brightness: effectsState.brightness.amount / 100,
     contrast: effectsState.contrast.amount / 100,
+    glitch: effectsState.glitch.amount / 100,
+    rgbShift: effectsState.rgbShift.amount / 100,
+    rgbMultiply: effectsState.rgbMultiply.amount / 100,
+    rgbMultiplyColor: effectsState.rgbMultiply.color,
   };
 }
 

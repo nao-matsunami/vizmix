@@ -1,12 +1,13 @@
 /**
- * VizMix - MIDI Manager
- * v0.7.0
+ * VizMix - MIDI Manager with MIDI Learn
+ * v1.0.0
  */
 
 let midiAccess = null;
 let callbacks = {};
 let isEnabled = false;
 
+// Fixed mappings (default)
 const NOTE_MAP = {
   0: { action: 'bankA', value: 0 },
   1: { action: 'bankA', value: 1 },
@@ -39,8 +40,118 @@ const CC_MAP = {
   12: { action: 'fxContrast', range: [-100, 100] },
 };
 
+// ── MIDI Learn ─────────────────────────────────────────────────────────────
+const LEARN_STORAGE_KEY = 'vizmix-midi-learn';
+let learnMode = false;
+let learnTarget = null; // { targetId, type: 'cc'|'note', range }
+let learnMappings = {}; // { "cc-{ch}-{num}": { targetId, range }, "note-{ch}-{num}": { targetId, type:'trigger' } }
+
+// Learnable targets registry: targetId → { element, type: 'slider'|'button', range }
+const learnableTargets = {};
+
+export function registerLearnableTarget(targetId, element, type, range) {
+  learnableTargets[targetId] = { element, type, range };
+}
+
+function loadLearnMappings() {
+  try {
+    const saved = localStorage.getItem(LEARN_STORAGE_KEY);
+    if (saved) {
+      learnMappings = JSON.parse(saved);
+      console.log('[MIDI Learn] Restored mappings:', Object.keys(learnMappings).length);
+    }
+  } catch (e) {
+    console.warn('[MIDI Learn] Failed to load mappings:', e);
+  }
+}
+
+function saveLearnMappings() {
+  try {
+    localStorage.setItem(LEARN_STORAGE_KEY, JSON.stringify(learnMappings));
+  } catch (e) {
+    console.warn('[MIDI Learn] Failed to save mappings:', e);
+  }
+}
+
+export function isLearnMode() {
+  return learnMode;
+}
+
+export function toggleLearnMode() {
+  learnMode = !learnMode;
+  learnTarget = null;
+
+  // Highlight all learnable elements
+  Object.values(learnableTargets).forEach(t => {
+    if (t.element) {
+      t.element.classList.toggle('midi-learnable', learnMode);
+    }
+  });
+
+  if (learnMode) {
+    // Add click listeners for target selection
+    Object.entries(learnableTargets).forEach(([targetId, t]) => {
+      if (t.element) {
+        t.element._midiLearnClick = () => {
+          // Select this as learn target
+          Object.values(learnableTargets).forEach(lt => {
+            if (lt.element) lt.element.classList.remove('midi-learn-selected');
+          });
+          t.element.classList.add('midi-learn-selected');
+          learnTarget = {
+            targetId,
+            type: t.type === 'button' ? 'note' : 'cc',
+            range: t.range || [0, 100],
+          };
+          showMidiIndicator(`Learn: waiting for MIDI input...`);
+          console.log(`[MIDI Learn] Target selected: ${targetId}`);
+        };
+        t.element.addEventListener('click', t.element._midiLearnClick);
+      }
+    });
+    showMidiIndicator('MIDI Learn: click a control');
+  } else {
+    // Remove click listeners
+    Object.values(learnableTargets).forEach(t => {
+      if (t.element && t.element._midiLearnClick) {
+        t.element.removeEventListener('click', t.element._midiLearnClick);
+        t.element._midiLearnClick = null;
+      }
+      if (t.element) {
+        t.element.classList.remove('midi-learn-selected');
+      }
+    });
+  }
+
+  return learnMode;
+}
+
+export function clearLearnMapping(targetId) {
+  const keysToRemove = [];
+  for (const [key, mapping] of Object.entries(learnMappings)) {
+    if (mapping.targetId === targetId) {
+      keysToRemove.push(key);
+    }
+  }
+  keysToRemove.forEach(k => delete learnMappings[k]);
+  saveLearnMappings();
+  console.log(`[MIDI Learn] Cleared mapping for ${targetId}`);
+}
+
+export function clearAllLearnMappings() {
+  learnMappings = {};
+  saveLearnMappings();
+  console.log('[MIDI Learn] All mappings cleared');
+}
+
+export function getLearnMappings() {
+  return { ...learnMappings };
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function initMidi(actionCallbacks) {
   callbacks = actionCallbacks;
+  loadLearnMappings();
 
   if (!navigator.requestMIDIAccess) {
     console.warn('Web MIDI API not supported');
@@ -80,9 +191,55 @@ function handleMidiMessage(e) {
 
   const [status, data1, data2] = e.data;
   const msgType = status & 0xF0;
+  const channel = status & 0x0F;
 
+  // ── MIDI Learn mode: capture incoming MIDI ──
+  if (learnMode && learnTarget) {
+    if (msgType === 0xB0) {
+      // CC → map to target
+      const key = `cc-${channel}-${data1}`;
+      learnMappings[key] = {
+        targetId: learnTarget.targetId,
+        range: learnTarget.range,
+      };
+      saveLearnMappings();
+      showMidiIndicator(`Learned: CC${data1} → ${learnTarget.targetId}`);
+      console.log(`[MIDI Learn] Mapped CC${data1} → ${learnTarget.targetId}`);
+      learnTarget = null;
+      // Deselect highlight
+      Object.values(learnableTargets).forEach(t => {
+        if (t.element) t.element.classList.remove('midi-learn-selected');
+      });
+      return;
+    } else if (msgType === 0x90 && data2 > 0) {
+      // Note → map to target as trigger
+      const key = `note-${channel}-${data1}`;
+      learnMappings[key] = {
+        targetId: learnTarget.targetId,
+        type: 'trigger',
+      };
+      saveLearnMappings();
+      showMidiIndicator(`Learned: Note${data1} → ${learnTarget.targetId}`);
+      console.log(`[MIDI Learn] Mapped Note${data1} → ${learnTarget.targetId}`);
+      learnTarget = null;
+      Object.values(learnableTargets).forEach(t => {
+        if (t.element) t.element.classList.remove('midi-learn-selected');
+      });
+      return;
+    }
+  }
+
+  // ── Normal mode: check learn mappings first, then fixed mappings ──
   if (msgType === 0x90 && data2 > 0) {
     // Note On
+    const learnKey = `note-${channel}-${data1}`;
+    const learned = learnMappings[learnKey];
+    if (learned && callbacks[learned.targetId]) {
+      callbacks[learned.targetId]();
+      showMidiIndicator(`Note ${data1} → ${learned.targetId}`);
+      return;
+    }
+    // Fixed mapping
     const mapping = NOTE_MAP[data1];
     if (mapping && callbacks[mapping.action]) {
       callbacks[mapping.action](mapping.value);
@@ -90,6 +247,16 @@ function handleMidiMessage(e) {
     }
   } else if (msgType === 0xB0) {
     // Control Change
+    const learnKey = `cc-${channel}-${data1}`;
+    const learned = learnMappings[learnKey];
+    if (learned && callbacks[learned.targetId]) {
+      const [min, max] = learned.range || [0, 100];
+      const value = Math.round(min + (data2 / 127) * (max - min));
+      callbacks[learned.targetId](value);
+      showMidiIndicator(`CC${data1}: ${value} → ${learned.targetId}`);
+      return;
+    }
+    // Fixed mapping
     const mapping = CC_MAP[data1];
     if (mapping && callbacks[mapping.action]) {
       const [min, max] = mapping.range;

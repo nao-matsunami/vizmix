@@ -20,6 +20,7 @@ export class MediaBrowser {
     this.fileCache = new Map(); // Cache File objects for drag & drop
     this.blobUrlCache = new Map(); // Cache Blob URLs for drag & drop
     this.pngHandles = new Map(); // Cache PNG sidecar handles (lowercase name → handle)
+    this.onDoubleClickAssign = null; // Callback for double-click assign
 
     this.init();
   }
@@ -210,6 +211,9 @@ export class MediaBrowser {
       item.addEventListener('dragstart', (e) => this.handleDragStart(e, file));
       item.addEventListener('dragend', (e) => this.handleDragEnd(e));
 
+      // Double-click to assign to active bank
+      item.addEventListener('dblclick', () => this.handleDoubleClick(file));
+
       this.mediaList.appendChild(item);
     });
   }
@@ -369,6 +373,25 @@ export class MediaBrowser {
       const img = new Image();
       img.src = thumb.style.backgroundImage.slice(5, -2);
       e.dataTransfer.setDragImage(img, 30, 20);
+    }
+  }
+
+  handleDoubleClick(file) {
+    const blobUrl = this.blobUrlCache.get(file.name);
+    const fileData = this.fileCache.get(file.name);
+    if (!blobUrl || !fileData) {
+      console.warn(`[MediaBrowser ${this.channel}] File not cached yet: ${file.name}`);
+      return;
+    }
+
+    if (this.onDoubleClickAssign) {
+      this.onDoubleClickAssign({
+        name: file.name,
+        type: fileData.type || (file.type === 'video' ? 'video/mp4' : 'text/plain'),
+        mediaType: file.type,
+        blobUrl: blobUrl,
+        channel: this.channel,
+      });
     }
   }
 
