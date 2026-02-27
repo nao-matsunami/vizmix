@@ -47,6 +47,21 @@ export class ShaderSource {
     this.shaderCode = null;
     this.name = "unnamed"; // シェーダー名（デバッグ用）
     this.renderCount = 0; // レンダリング回数（デバッグ用）
+    this.uniformValues = {}; // ISF INPUTS DEFAULT値
+  }
+
+  /**
+   * uniformパラメータをセットする（ISF INPUTS DEFAULT値用）
+   * render()時にdevice.scope.resolve().setValue()で適用される
+   */
+  setParameter(name, value) {
+    if (Array.isArray(value)) {
+      this.uniformValues[name] = new Float32Array(value);
+    } else if (typeof value === 'boolean') {
+      this.uniformValues[name] = value ? 1 : 0;
+    } else {
+      this.uniformValues[name] = value;
+    }
   }
 
   // 解像度を設定するメソッド
@@ -191,6 +206,11 @@ export class ShaderSource {
         1.0,
       ]);
       device.scope.resolve("iMouse").setValue([0, 0, 0, 0]);
+
+      // ISF INPUTS DEFAULT値を適用
+      for (const name in this.uniformValues) {
+        device.scope.resolve(name).setValue(this.uniformValues[name]);
+      }
 
       // Draw fullscreen quad
       device.setVertexBuffer(this.vertexBuffer, 0);

@@ -41,7 +41,8 @@ import {
   resetEffect,
   getEffectParams,
 } from "./effects.js";
-import { videoManager, setVideoSource, setShaderSource, getSourceType, getShaderVersion } from "./videoManager.js";
+import { videoManager, setVideoSource, setShaderSource, setShaderDefaults, setShaderRawSource, getShaderRawSource, getSourceType, getShaderVersion } from "./videoManager.js";
+import { ShaderPreviewRenderer } from "./shaderPreview.js";
 import {
   bpmState,
   setBPM,
@@ -51,7 +52,7 @@ import {
   setSwitchInterval,
   startBeatLoop,
 } from "./bpm.js";
-import { generateVideoThumbnail, setButtonThumbnail } from "./thumbnail.js";
+import { generateVideoThumbnail, generateISFThumbnail, setButtonThumbnail } from "./thumbnail.js";
 import {
   loadSettings,
   loadAllShaders,
@@ -1010,6 +1011,16 @@ function createBankButtons(containerId, channel) {
   }
 }
 
+// シェーダープレビューレンダラー（チャンネルごと）
+const shaderPreviews = { A: null, B: null };
+
+function destroyShaderPreview(channel) {
+  if (shaderPreviews[channel]) {
+    shaderPreviews[channel].destroy();
+    shaderPreviews[channel] = null;
+  }
+}
+
 function updateChannelPreview(channel) {
   const videoChannel = channel === "A" ? videoManager.channelA : videoManager.channelB;
   const previewId = channel === "A" ? "previewA" : "previewB";
@@ -1022,11 +1033,19 @@ function updateChannelPreview(channel) {
   // Check if in webcam mode
   const isWebcamMode = channelSourceMode[channel] === 'cam' && webcamManager && webcamManager.isActive(channel);
 
+  // シェーダープレビューの除去
+  const removeShaderPreview = () => {
+    destroyShaderPreview(channel);
+    const cvs = preview.querySelector('canvas.shader-preview');
+    if (cvs) cvs.remove();
+  };
+
   if (isWebcamMode) {
     // Webcam mode
     preview.classList.remove('shader-mode');
     preview.classList.add('video-mode');
     if (indicator) indicator.classList.remove('visible');
+    removeShaderPreview();
 
     const webcamVideo = webcamManager.getVideo(channel);
     if (webcamVideo) {
@@ -1045,12 +1064,33 @@ function updateChannelPreview(channel) {
     // Shader mode
     preview.classList.add('shader-mode');
     preview.classList.remove('video-mode');
-    if (indicator) indicator.classList.add('visible');
+    if (indicator) indicator.classList.remove('visible');
 
     // Remove webcam video if present
     const webcamVideo = webcamManager ? webcamManager.getVideo(channel) : null;
     if (webcamVideo && preview.contains(webcamVideo)) {
       webcamVideo.style.display = 'none';
+    }
+
+    // シェーダープレビュー用canvas + レンダラーを生成
+    let cvs = preview.querySelector('canvas.shader-preview');
+    if (!cvs) {
+      removeShaderPreview();
+      cvs = document.createElement('canvas');
+      cvs.className = 'shader-preview';
+      cvs.width = 320;
+      cvs.height = 180;
+      cvs.style.transform = 'scaleY(-1)';
+      preview.appendChild(cvs);
+    }
+
+    // 現在のバンクの生ソースを取得してプレビューレンダラーにセット
+    const rawSource = getShaderRawSource(channel, videoChannel.currentIndex);
+    if (rawSource) {
+      if (!shaderPreviews[channel]) {
+        shaderPreviews[channel] = new ShaderPreviewRenderer(cvs);
+      }
+      shaderPreviews[channel].setShader(rawSource);
     }
 
     console.log(`Preview ${channel} updated (shader mode)`);
@@ -1059,6 +1099,7 @@ function updateChannelPreview(channel) {
     preview.classList.remove('shader-mode');
     preview.classList.add('video-mode');
     if (indicator) indicator.classList.remove('visible');
+    removeShaderPreview();
 
     // Remove webcam video if present
     const webcamVideo = webcamManager ? webcamManager.getVideo(channel) : null;
@@ -1088,11 +1129,78 @@ async function handleShaderDrop(channel, index, file, btn) {
   }
 }
 
-function handleShaderCode(channel, index, shaderCode, fileName, btn) {
-  console.log(`handleShaderCode: [${channel}] bank=${index + 1}, file=${fileName}, code length=${shaderCode.length}`);
+/**
+ * ISFフォーマット(.fs)をPlayCanvas ShaderSource用GLSLに変換
+ * - /*{ JSON }*\/ ヘッダーを除去
+ * - void main() → void mainImage(out vec4 fragColor, in vec2 fragCoord)
+ * - isf_FragNormCoord → (fragCoord / iResolution.xy)
+ * - RENDERSIZE → iResolution.xy
+ * - TIME → iTime
+ * - gl_FragColor → fragColor
+ */
+function parseISFForPlayCanvas(source) {
+  // INPUTSを取得
+  let isfMeta = null;
+  const metaMatch = source.match(/\/\*(\{[\s\S]*?\})\*\//m);
+  if (metaMatch) {
+    try { isfMeta = JSON.parse(metaMatch[1]); } catch(e) {}
+  }
 
-  setShaderSource(channel, index, shaderCode, fileName);
+  let code = source.replace(/\/\*\{[\s\S]*?\}\*\//m, '').trim();
+  code = code.replace(/\bisf_FragNormCoord\b/g, '(fragCoord / iResolution.xy)');
+  code = code.replace(/\bRENDERSIZE\b/g, 'iResolution.xy');
+  code = code.replace(/\bTIME\b/g, 'iTime');
+  code = code.replace(/void\s+main\s*\(\s*\)/, 'void mainImage(out vec4 fragColor, in vec2 fragCoord)');
+  code = code.replace(/\bgl_FragColor\b/g, 'fragColor');
+
+  // INPUTSのuniform宣言を先頭に追加
+  const typeMap = { float:'float', bool:'bool', int:'int', color:'vec4', point2D:'vec2' };
+  let uniformDecls = '';
+  if (isfMeta && isfMeta.INPUTS) {
+    for (const inp of isfMeta.INPUTS) {
+      const t = typeMap[inp.TYPE] || 'float';
+      uniformDecls += `uniform ${t} ${inp.NAME};\n`;
+    }
+  }
+  return uniformDecls + code;
+}
+
+function handleShaderCode(channel, index, shaderCode, fileName, btn) {
+  console.log('[ISF変換前]', shaderCode.substring(0, 100));
+  const isISF = fileName.toLowerCase().endsWith('.fs');
+  const convertedCode = isISF ? parseISFForPlayCanvas(shaderCode) : shaderCode;
+  console.log('[ISF変換後]', convertedCode.substring(0, 100));
+  console.log(`handleShaderCode: [${channel}] bank=${index + 1}, file=${fileName}, code length=${convertedCode.length}`);
+
+  setShaderSource(channel, index, convertedCode, fileName);
+  setShaderRawSource(channel, index, shaderCode);
   videoManager.invalidateShaderCache(channel, index);
+
+  // ISF INPUTSのDEFAULT値をバンクデータに保存（ShaderSource作成時に適用される）
+  if (isISF) {
+    const metaMatch = shaderCode.match(/\/\*(\{[\s\S]*?\})\*\//m);
+    if (metaMatch) {
+      try {
+        const isfMeta = JSON.parse(metaMatch[1]);
+        if (isfMeta.INPUTS) {
+          const defaults = {};
+          for (const inp of isfMeta.INPUTS) {
+            if (inp.DEFAULT !== undefined) {
+              defaults[inp.NAME] = inp.DEFAULT;
+            }
+          }
+          if (Object.keys(defaults).length > 0) {
+            setShaderDefaults(channel, index, defaults);
+          }
+        }
+      } catch(e) { console.warn('ISF DEFAULT parse error:', e); }
+    }
+
+    // ISFサムネール生成（生のISFソースを渡す）
+    generateISFThumbnail(shaderCode).then(thumb => {
+      if (thumb) setButtonThumbnail(btn, thumb);
+    }).catch(e => console.warn('ISF thumbnail error:', e));
+  }
 
   btn.title = fileName;
   btn.setAttribute('data-name', fileName);
@@ -1101,10 +1209,10 @@ function handleShaderCode(channel, index, shaderCode, fileName, btn) {
   console.log(`[${channel}] Bank ${index + 1}: Assigned shader "${fileName}"`);
 
   // Save shader to storage
-  saveShaderCode(channel, index, shaderCode);
+  saveShaderCode(channel, index, convertedCode);
   updateBankSettings(channel, index, { type: 'shader', name: fileName, thumbnail: null });
 
-  broadcastShaderFile(channel, index, shaderCode, fileName);
+  broadcastShaderFile(channel, index, convertedCode, fileName);
 
   if (btn.classList.contains("active")) {
     console.log(`handleShaderCode: [${channel}] Bank ${index + 1} is active, switching`);
@@ -1266,6 +1374,16 @@ async function initPlayCanvas() {
     }
 
     videoManager.update();
+
+    // シェーダープレビューレンダラー更新（メインShaderSourceと同じ時刻基準）
+    if (shaderPreviews.A?.active) {
+      const t = channelA.shaderSource ? performance.now() / 1000 - channelA.shaderSource.startTime : 0;
+      shaderPreviews.A.render(t);
+    }
+    if (shaderPreviews.B?.active) {
+      const t = channelB.shaderSource ? performance.now() / 1000 - channelB.shaderSource.startTime : 0;
+      shaderPreviews.B.render(t);
+    }
 
     const texA = videoManager.getTextureA();
     const texB = videoManager.getTextureB();

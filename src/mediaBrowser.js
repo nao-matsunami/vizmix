@@ -4,7 +4,7 @@
  * Supports drag & drop to Bank buttons
  */
 
-import { generateVideoThumbnail } from './thumbnail.js';
+import { generateVideoThumbnail, generateISFThumbnail } from './thumbnail.js';
 
 const SUPPORTED_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov'];
 const SUPPORTED_SHADER_EXTENSIONS = ['.glsl', '.frag', '.fs'];
@@ -19,6 +19,7 @@ export class MediaBrowser {
     this.thumbnailCache = new Map();
     this.fileCache = new Map(); // Cache File objects for drag & drop
     this.blobUrlCache = new Map(); // Cache Blob URLs for drag & drop
+    this.pngHandles = new Map(); // Cache PNG sidecar handles (lowercase name → handle)
 
     this.init();
   }
@@ -123,6 +124,7 @@ export class MediaBrowser {
     if (!this.currentDirHandle) return;
 
     this.files = [];
+    this.pngHandles = new Map();
     this.mediaList.innerHTML = '<div class="loading">Loading...</div>';
 
     try {
@@ -139,6 +141,8 @@ export class MediaBrowser {
             name: entry.name,
             type: isVideo ? 'video' : 'shader'
           });
+        } else if (name.endsWith('.png')) {
+          this.pngHandles.set(name, entry);
         }
       }
 
@@ -256,7 +260,12 @@ export class MediaBrowser {
         this.blobUrlCache.set(file.name, blobUrl);
         console.log(`[MediaBrowser ${this.channel}] Cached: ${file.name} -> ${blobUrl}`);
 
-        if (file.type !== 'video') continue;
+        if (file.type !== 'video') {
+          if (file.name.toLowerCase().endsWith('.fs')) {
+            await this.generateISFThumb(file, fileData);
+          }
+          continue;
+        }
 
         // Probe video resolution
         const resolution = await this.probeVideoResolution(blobUrl);
@@ -299,6 +308,31 @@ export class MediaBrowser {
       } catch (err) {
         console.warn(`Failed to generate thumbnail for ${file.name}:`, err);
       }
+    }
+  }
+
+  async generateISFThumb(file, fileData) {
+    // サイドカーPNG（同名.png）を優先、なければWebGLで動的生成
+    const baseName = file.name.slice(0, file.name.lastIndexOf('.')).toLowerCase();
+    const pngHandle = this.pngHandles.get(baseName + '.png');
+
+    let thumbnail;
+    if (pngHandle) {
+      const pngFile = await pngHandle.getFile();
+      thumbnail = URL.createObjectURL(pngFile);
+      console.log(`[MediaBrowser ${this.channel}] ISF sidecar PNG: ${file.name}`);
+    } else {
+      const shaderSource = await fileData.text();
+      thumbnail = await generateISFThumbnail(shaderSource);
+      console.log(`[MediaBrowser ${this.channel}] ISF dynamic thumb: ${file.name}`);
+    }
+
+    this.thumbnailCache.set(file.name, thumbnail);
+    const index = this.files.indexOf(file);
+    const item = this.mediaList.querySelector(`[data-index="${index}"]`);
+    if (item) {
+      const thumb = item.querySelector('.media-thumb, .media-thumb-small');
+      if (thumb) thumb.style.backgroundImage = `url(${thumbnail})`;
     }
   }
 

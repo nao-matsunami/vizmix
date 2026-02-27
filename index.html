@@ -279,20 +279,17 @@
         background: linear-gradient(135deg, #3a2a4a, #2a1a3a);
       }
       .grid-view .media-item {
-        aspect-ratio: 16/9;
+        overflow: hidden;
       }
       .grid-view .media-thumb {
         width: 100%;
-        height: 100%;
-        background-size: cover;
+        height: 80px;
+        background-size: contain;
         background-position: center;
+        background-repeat: no-repeat;
         border-radius: 4px;
       }
       .grid-view .media-name {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
         padding: 2px 4px;
         background: rgba(0,0,0,0.7);
         font-size: 9px;
@@ -517,10 +514,13 @@
         align-items: center;
         background: linear-gradient(135deg, #1a0a2e 0%, #2d1b4e 50%, #1a0a2e 100%);
         color: #a855f7;
-        font-size: 18px;
+        font-size: 16px;
         font-weight: bold;
-        letter-spacing: 2px;
+        letter-spacing: 1px;
         text-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
+        padding: 0 10px;
+        text-align: center;
+        word-break: break-all;
       }
       .shader-indicator.visible {
         display: flex;
@@ -1147,7 +1147,7 @@
     <header>
       <div>
         <h1>VizMix <span style="font-size: 14px; font-weight: normal; color: #888;">v0.8.1</span></h1>
-        <p class="tagline">Browser-based VJ Software</p>
+        <p class="tagline">Browser-based VJ Software <span style="font-size: 10px; color: #a855f7; margin-left: 8px;">Shader: Requires dedicated GPU (GTX 1060 / RX 580 or better)</span></p>
       </div>
       <div style="display: flex; align-items: center;">
         <div class="midi-section">

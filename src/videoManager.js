@@ -26,6 +26,8 @@ const BANKS = {
     shaderCodes: [null, null, null, null, null, null, null, null],
     shaderNames: [null, null, null, null, null, null, null, null],
     shaderVersions: [0, 0, 0, 0, 0, 0, 0, 0],
+    shaderDefaults: [null, null, null, null, null, null, null, null],
+    shaderRawSources: [null, null, null, null, null, null, null, null],
     videoFileNames: [null, null, null, null, null, null, null, null],
     videoMimeTypes: [null, null, null, null, null, null, null, null],
   },
@@ -44,6 +46,8 @@ const BANKS = {
     shaderCodes: [null, null, null, null, null, null, null, null],
     shaderNames: [null, null, null, null, null, null, null, null],
     shaderVersions: [0, 0, 0, 0, 0, 0, 0, 0],
+    shaderDefaults: [null, null, null, null, null, null, null, null],
+    shaderRawSources: [null, null, null, null, null, null, null, null],
     videoFileNames: [null, null, null, null, null, null, null, null],
     videoMimeTypes: [null, null, null, null, null, null, null, null],
   }
@@ -80,6 +84,27 @@ export function setShaderSource(channel, index, shaderCode, name = null) {
   bank.shaderVersions[index]++;
   
   console.log(`[${channel}] Bank ${index + 1}: Shader saved (${shaderCode?.length || 0} chars), name: ${bank.shaderNames[index]}, version: ${bank.shaderVersions[index]}`);
+}
+
+// ISF INPUTS DEFAULT値をバンクデータに保存
+export function setShaderDefaults(channel, index, defaults) {
+  const bank = BANKS[channel];
+  if (!bank || index < 0 || index >= 8) return;
+  bank.shaderDefaults[index] = defaults;
+  console.log(`[${channel}] Bank ${index + 1}: Shader defaults saved`, defaults);
+}
+
+// シェーダーの生ソースコードを保存（プレビューレンダラー用）
+export function setShaderRawSource(channel, index, rawSource) {
+  const bank = BANKS[channel];
+  if (!bank || index < 0 || index >= 8) return;
+  bank.shaderRawSources[index] = rawSource;
+}
+
+export function getShaderRawSource(channel, index) {
+  const bank = BANKS[channel];
+  if (!bank || index < 0 || index >= 8) return null;
+  return bank.shaderRawSources[index];
 }
 
 export function getSourceType(channel, index) {
@@ -293,6 +318,15 @@ class VideoChannel {
         newShader.loadFromCode(shaderCode);
         newShader.name = shaderName || `shader_${index + 1}`;
         
+        // ISF INPUTS DEFAULT値を適用
+        const defaults = BANKS[this.name]?.shaderDefaults?.[index];
+        if (defaults) {
+          for (const [paramName, paramValue] of Object.entries(defaults)) {
+            newShader.setParameter(paramName, paramValue);
+          }
+          console.log(`[${this.name}] Applied shader defaults:`, newShader.uniformValues);
+        }
+
         this.shaderSource = newShader;
         console.log(`[${this.name}] Created shader: ${shaderName} (${shaderCode.length} chars)`);
       } catch (e) {
