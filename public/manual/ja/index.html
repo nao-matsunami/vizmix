@@ -18,13 +18,14 @@
   <header>
     <h1>VizMix マニュアル</h1>
     <p class="tagline">Browser-based VJ Software</p>
-    <p class="version">Version 0.8.1</p>
+    <p class="version">Version 1.0.0</p>
     <nav>
       <a href="#about">VizMixとは</a>
       <a href="#install">インストール</a>
       <a href="#basic">基本操作</a>
       <a href="#mediabrowser">メディアブラウザ</a>
       <a href="#webcam">Webcam</a>
+      <a href="#playback">再生コントロール</a>
       <a href="#keyboard">キーボード</a>
       <a href="#bpm">BPM機能</a>
       <a href="#effects">エフェクト</a>
@@ -41,10 +42,12 @@
       <ul>
         <li>インストール不要 - ブラウザだけで動作</li>
         <li>2チャンネルミキシング - A/Bチャンネルをクロスフェード</li>
+        <li>チャンネルディマー - 各チャンネルの明るさを独立制御</li>
         <li>16バンク - 各チャンネル8つの素材を切り替え</li>
-        <li>BPM同期 - タップテンポや自動切替に対応</li>
-        <li>MIDI対応 - ハードウェアコントローラーで操作</li>
-        <li>GLSLシェーダー対応 - リアルタイムグラフィックス</li>
+        <li>BPM同期 - タップテンポ、自動切替、BPMフラッシュ</li>
+        <li>映像エフェクト - Color / Adjust / Blur / Glitch 系エフェクト</li>
+        <li>MIDI対応 - MIDIラーンで自由にアサイン</li>
+        <li>GLSLシェーダー / ISFシェーダー対応</li>
       </ul>
     </section>
 
@@ -67,7 +70,7 @@
       <ol>
         <li>ZIPファイルをダウンロードして解凍</li>
         <li>コマンドプロンプト/ターミナルを開く</li>
-        <li>解凍したフォルダに移動: <code>cd VizMix-v0.8.1</code></li>
+        <li>解凍したフォルダに移動: <code>cd VizMix-v1.0.0</code></li>
         <li>サーバーを起動: <code>python -m http.server 8000</code></li>
         <li>ブラウザで <code>http://localhost:8000</code> にアクセス</li>
       </ol>
@@ -76,7 +79,7 @@
       <ol>
         <li>ZIPファイルをダウンロードして解凍</li>
         <li>コマンドプロンプト/ターミナルを開く</li>
-        <li>解凍したフォルダに移動: <code>cd VizMix-v0.8.1</code></li>
+        <li>解凍したフォルダに移動: <code>cd VizMix-v1.0.0</code></li>
         <li>サーバーを起動: <code>npx serve</code></li>
         <li>表示されたURLにアクセス</li>
       </ol>
@@ -96,24 +99,35 @@
 
       <h3>画面構成</h3>
       <ul>
-        <li><strong>Channel A（左）</strong> - 映像ソースA + 8つのバンクボタン</li>
-        <li><strong>Master（中央）</strong> - クロスフェーダー、BPM設定</li>
-        <li><strong>Channel B（右）</strong> - 映像ソースB + 8つのバンクボタン</li>
+        <li><strong>Channel A（左）</strong> - ディマー + 映像プレビュー + 再生コントロール + 8バンク</li>
+        <li><strong>Master（中央）</strong> - マスタープレビュー + クロスフェーダー + BPM設定</li>
+        <li><strong>Channel B（右）</strong> - 映像プレビュー + ディマー + 再生コントロール + 8バンク</li>
+        <li><strong>エフェクトパネル（右サイド）</strong> - VIDEO EFFECTS（開閉可能）</li>
+      </ul>
+
+      <h3>チャンネルディマー</h3>
+      <p>各チャンネルプレビューの横にある縦スライダーがディマーです。</p>
+      <ul>
+        <li>0%（下）: 真っ暗 / 100%（上）: フル表示</li>
+        <li>クロスフェーダーとは独立して動作</li>
+        <li>プレビューの明るさにリアルタイム反映</li>
+        <li>MIDIコントローラーからも操作可能</li>
       </ul>
 
       <h3>映像の読み込み</h3>
       <ol>
         <li>動画ファイルをバンクボタンにドラッグ&ドロップ</li>
+        <li>またはメディアブラウザのサムネイルをダブルクリックしてアサイン</li>
         <li>サムネールが表示され、映像が読み込まれます</li>
         <li>バンクボタンをクリックして映像を切り替え</li>
       </ol>
       <p class="note">対応形式: MP4 (H.264)、WebM (VP8/VP9)。MP4を推奨します。</p>
-      <p class="note">※ v0.7.0よりSpeedコントロール（逆再生等）は非表示になりました。</p>
 
       <h3>シェーダーの読み込み</h3>
       <ol>
         <li>シェーダーファイル（.glsl / .frag / .fs）をバンクボタンにドラッグ&ドロップ</li>
         <li>ボタンが紫色になり、シェーダーが読み込まれます</li>
+        <li>ISFフォーマット（.fs）にも対応 - INPUTS の uniform が自動生成されます</li>
       </ol>
 
       <h3>クロスフェード</h3>
@@ -126,6 +140,7 @@
 
       <h3>Output Window</h3>
       <p>「Open Output」ボタンで出力用ウィンドウを開きます。プロジェクターやLEDに接続するモニターに移動してフルスクリーンにしてください。</p>
+      <p>出力解像度はヘッダーのドロップダウンで 540p / 720p / 1080p から選択できます。</p>
     </section>
 
     <section id="mediabrowser">
@@ -147,16 +162,15 @@
       <p>パネル右上のアイコンで切り替えできます。</p>
 
       <h3>バンクへの割り当て</h3>
-      <ol>
-        <li>メディアブラウザのサムネイルをドラッグ</li>
-        <li>割り当てたいバンクボタンにドロップ</li>
-        <li>映像が読み込まれ、バンクに登録されます</li>
-      </ol>
+      <ul>
+        <li><strong>ドラッグ&ドロップ</strong>: サムネイルをドラッグしてバンクボタンにドロップ</li>
+        <li><strong>ダブルクリック</strong>: サムネイルをダブルクリックすると、現在アクティブなバンクにアサイン</li>
+      </ul>
 
       <h3>対応フォーマット</h3>
       <ul>
-        <li>MP4 (H.264) - 推奨</li>
-        <li>WebM</li>
+        <li>動画: MP4 (H.264) 推奨、WebM</li>
+        <li>シェーダー: .glsl / .frag / .fs（ISF対応）</li>
       </ul>
     </section>
 
@@ -178,15 +192,24 @@
         <li>OBS仮想カメラなども使用可能</li>
       </ul>
 
-      <h3>エフェクト適用</h3>
-      <p>VIDEO EFFECTSやクロスフェーダーはカメラ映像にも適用されます。メディア映像と同じようにエフェクトをかけることができます。</p>
-
       <h3>注意事項</h3>
       <ul>
         <li>HTTPS または localhost 環境が必要です</li>
         <li>初回使用時にブラウザがカメラへのアクセス許可を求めます</li>
-        <li>カメラが認識されない場合はページを再読み込みしてください</li>
       </ul>
+    </section>
+
+    <section id="playback">
+      <h2>再生コントロール</h2>
+      <p>各チャンネルのプレビュー下に再生コントロールがあります。</p>
+
+      <h3>操作</h3>
+      <ul>
+        <li><strong>再生/一時停止ボタン</strong>: クリックで再生と一時停止を切り替え</li>
+        <li><strong>シークバー</strong>: ドラッグで映像の任意の位置にジャンプ（自動的に一時停止）</li>
+        <li><strong>再生時間</strong>: 現在の再生位置を表示</li>
+      </ul>
+      <p class="note">※ ISFシェーダー再生中はシークバーは非表示になります。</p>
     </section>
 
     <section id="keyboard">
@@ -214,6 +237,10 @@
         <tr><td>F4</td><td>Blur リセット</td></tr>
         <tr><td>F5</td><td>Brightness リセット</td></tr>
         <tr><td>F6</td><td>Contrast リセット</td></tr>
+        <tr><td>F7</td><td>Glitch リセット</td></tr>
+        <tr><td>F8</td><td>RGB Shift リセット</td></tr>
+        <tr><td>F9</td><td>RGB Multiply リセット</td></tr>
+        <tr><td>Tab</td><td>エフェクトパネル開閉</td></tr>
         <tr><td>O</td><td>Output Window を開く</td></tr>
         <tr><td>H</td><td>ヘルプ表示</td></tr>
         <tr><td>Ctrl+Shift+D</td><td>デバッグオーバーレイ</td></tr>
@@ -238,21 +265,27 @@
         <li>切替間隔を選択（1/2/4/8/16拍）</li>
         <li>ビートに合わせてA↔Bが自動で切り替わります</li>
       </ol>
+
+      <h3>BPMフラッシュ</h3>
+      <p>BPMに合わせて白いフラッシュを映像の上にオーバーレイ表示する機能です。</p>
+      <ul>
+        <li><strong>FLASH ボタン</strong>: クリックでフラッシュの ON/OFF を切り替え</li>
+        <li><strong>パターン選択</strong>: 1/1（毎拍）/ 1/2 / 1/4（デフォルト）/ 1/8 から選択</li>
+      </ul>
     </section>
 
     <section id="effects">
       <h2>エフェクト</h2>
 
-      <h3>VIDEO EFFECTSパネル</h3>
-      <p>バンクボタンの下にあるVIDEO EFFECTSパネルでエフェクトを操作します。</p>
-
-      <h4>操作方法</h4>
+      <h3>エフェクトパネル</h3>
+      <p>画面右側にエフェクトサイドパネルがあります。</p>
       <ul>
-        <li><strong>パネル開閉</strong>: ヘッダー「▼ VIDEO EFFECTS」をクリック</li>
+        <li><strong>パネル開閉</strong>: ✕ ボタンで閉じる / 右端の「FX」ボタンで開く / Tab キーでトグル</li>
         <li><strong>エフェクト選択</strong>: リストからエフェクトをクリック → パラメータ表示</li>
         <li><strong>ON/OFF切替</strong>: エフェクトをダブルクリック、またはパラメータパネルのトグル</li>
         <li><strong>パラメータ調整</strong>: スライダーをドラッグ</li>
       </ul>
+      <p class="note">パネルの開閉状態はブラウザに保存され、次回起動時に復元されます。</p>
 
       <h4>利用可能なエフェクト</h4>
       <table>
@@ -295,17 +328,26 @@
           <td>F4</td>
           <td>ぼかし（0-100%）</td>
         </tr>
+        <tr>
+          <td rowspan="3">Glitch</td>
+          <td>Glitch</td>
+          <td>F7</td>
+          <td>水平スライスずらし（0-100%）</td>
+        </tr>
+        <tr>
+          <td>RGB Shift</td>
+          <td>F8</td>
+          <td>RGBチャンネルオフセット（0-100%）</td>
+        </tr>
+        <tr>
+          <td>RGB Multiply</td>
+          <td>F9</td>
+          <td>単色乗算（0-100% + カラー選択）</td>
+        </tr>
       </table>
 
-      <h4>キーボードショートカット</h4>
-      <ul>
-        <li><kbd>F1</kbd>: Invert ON/OFF</li>
-        <li><kbd>F2</kbd>: Grayscale ON/OFF</li>
-        <li><kbd>F3</kbd>: Sepia ON/OFF</li>
-        <li><kbd>F4</kbd>: Blur リセット</li>
-        <li><kbd>F5</kbd>: Brightness リセット</li>
-        <li><kbd>F6</kbd>: Contrast リセット</li>
-      </ul>
+      <h4>RGB Multiply カラー選択</h4>
+      <p>カラーピッカーまたはプリセットボタン（R / G / B / C / M / Y）で色を選択できます。映像に色を載せてモノクロ風の演出に使えます。</p>
     </section>
 
     <section id="midi">
@@ -315,23 +357,30 @@
       <ol>
         <li>MIDIコントローラーをPCに接続</li>
         <li>VizMixを開く（または再読み込み）</li>
-        <li>右上にデバイス名が表示されれば接続完了</li>
+        <li>ヘッダーにデバイス名が表示されれば接続完了</li>
       </ol>
       <p class="note">※ MIDI機能はChrome/Edgeでのみ動作します。HTTPS接続が必要です。</p>
 
-      <h3>MIDIアサイン</h3>
-      <table>
-        <tr><th>MIDI</th><th>機能</th></tr>
-        <tr><td>Note 0-7</td><td>Channel A バンク 1-8</td></tr>
-        <tr><td>Note 8-15</td><td>Channel B バンク 1-8</td></tr>
-        <tr><td>Note 16</td><td>自動切替 ON/OFF</td></tr>
-        <tr><td>Note 17</td><td>タップテンポ</td></tr>
-        <tr><td>CC 1</td><td>クロスフェーダー (0-127 → 0-100%)</td></tr>
-        <tr><td>CC 2</td><td>BPM (0-127 → 40-200)</td></tr>
-      </table>
+      <h3>MIDIラーン</h3>
+      <p>任意のMIDIノブ/フェーダー/ボタンを、任意のUIパラメータに自由に割り当てできます。</p>
+      <ol>
+        <li>ヘッダーの「Learn」ボタンをクリック → ラーンモードに入る</li>
+        <li>割り当てたいUI要素（スライダー、ボタン等）をクリック</li>
+        <li>MIDIコントローラーのノブ/フェーダー/ボタンを操作</li>
+        <li>マッピングが自動的に登録される</li>
+        <li>「Learn」ボタンを再度クリックでラーンモード終了</li>
+      </ol>
+      <p>マッピングはブラウザに保存され、次回起動時に自動復元されます。「Clear」ボタンで全マッピングをクリアできます。</p>
 
-      <h3>仮想MIDIでのテスト</h3>
-      <p>MIDIコントローラーがない場合、loopMIDI（Windows）などの仮想MIDIソフトでテストできます。</p>
+      <h4>割り当て可能なパラメータ</h4>
+      <ul>
+        <li>クロスフェーダー</li>
+        <li>ディマー A / B</li>
+        <li>BPM</li>
+        <li>バンク A / B 切替</li>
+        <li>各エフェクトパラメータ</li>
+        <li>自動切替、タップテンポ など</li>
+      </ul>
     </section>
 
     <section id="trouble">
@@ -340,7 +389,7 @@
       <h3>映像が表示されない</h3>
       <ul>
         <li>動画形式を確認（MP4/H.264推奨）</li>
-        <li>Chromeのハードウェアアクセラレーションを無効にしてみる</li>
+        <li>Chromeのハードウェアアクセラレーションが有効か確認</li>
         <li>ページを再読み込み（Ctrl+Shift+R）</li>
       </ul>
 
@@ -353,9 +402,10 @@
 
       <h3>動作が重い</h3>
       <ul>
-        <li>動画解像度を下げる（1080p推奨）</li>
+        <li>出力解像度を下げる（ヘッダーの解像度セレクタで540pに変更）</li>
         <li>他のタブやアプリを閉じる</li>
-        <li>シェーダーの複雑さを減らす</li>
+        <li>Glitch/RGB Shift エフェクトはCPU負荷が高め。使用しない時は0に戻す</li>
+        <li>専用GPU（GTX 1060 / RX 580 以上）を推奨</li>
       </ul>
     </section>
 
@@ -363,7 +413,7 @@
       <h2>ライセンス</h2>
 
       <h3>VizMix</h3>
-      <p>© 2024 VizMix. All rights reserved.</p>
+      <p>&copy; 2024-2026 VizMix. All rights reserved.</p>
       <ul>
         <li><strong>体験版</strong>: 個人利用無料</li>
         <li><strong>フル版</strong>: 有料販売予定</li>
@@ -378,13 +428,6 @@
       </table>
       <p>詳細は <a href="../../LICENSE.txt">LICENSE.txt</a> をご覧ください。</p>
 
-      <h3>サンプル素材</h3>
-      <ul>
-        <li>個人・商用利用可能</li>
-        <li>再配布・転売は禁止</li>
-        <li>VizMixで作成した映像作品には自由に使用可能</li>
-      </ul>
-
       <h3>出力映像の権利</h3>
       <p>VizMixを使用して作成・出力した映像の権利はユーザーに帰属します。商用利用を含め、自由にご使用ください。</p>
 
@@ -394,8 +437,8 @@
   </main>
 
   <footer>
-    <p><a href="../../">← VizMixに戻る</a></p>
-    <p>VizMix v0.8.1 | <a href="../en/">English</a></p>
+    <p><a href="../../">&larr; VizMixに戻る</a></p>
+    <p>VizMix v1.0.0 | <a href="../en/">English</a></p>
   </footer>
 </body>
 </html>

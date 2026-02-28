@@ -110,11 +110,8 @@ export function initEffectsUI(effectsState, onEffectChange) {
   currentEffectsState = effectsState;
   onEffectChangeCallback = onEffectChange;
 
-  // パネル折りたたみ
-  const header = document.getElementById('effectsHeader');
-  if (header) {
-    header.addEventListener('click', togglePanel);
-  }
+  // サイドパネル開閉
+  initFxSidePanel();
 
   // エフェクト項目クリック
   document.querySelectorAll('.effect-item').forEach(item => {
@@ -139,6 +136,59 @@ export function initEffectsUI(effectsState, onEffectChange) {
   updateAllIndicators();
 
   console.log('Effects UI initialized');
+}
+
+/**
+ * サイドパネル開閉トグル
+ */
+function initFxSidePanel() {
+  const panel = document.getElementById('fx-side-panel');
+  const closeBtn = document.getElementById('fx-panel-close');
+  const toggleBtn = document.getElementById('fx-panel-toggle');
+
+  if (!panel || !closeBtn || !toggleBtn) return;
+
+  // 閉じる
+  closeBtn.addEventListener('click', () => {
+    panel.classList.add('fx-panel-closed');
+    toggleBtn.classList.remove('fx-toggle-hidden');
+  });
+
+  // 開く
+  toggleBtn.addEventListener('click', () => {
+    panel.classList.remove('fx-panel-closed');
+    toggleBtn.classList.add('fx-toggle-hidden');
+  });
+
+  // キーボードショートカット: Tabキーでトグル
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (panel.classList.contains('fx-panel-closed')) {
+        panel.classList.remove('fx-panel-closed');
+        toggleBtn.classList.add('fx-toggle-hidden');
+      } else {
+        panel.classList.add('fx-panel-closed');
+        toggleBtn.classList.remove('fx-toggle-hidden');
+      }
+    }
+  });
+
+  // localStorage から状態復元
+  const saved = localStorage.getItem('vizmix_fx_panel_open');
+  if (saved === 'false') {
+    panel.classList.add('fx-panel-closed');
+    toggleBtn.classList.remove('fx-toggle-hidden');
+  }
+
+  // 状態変化を localStorage に保存
+  const observer = new MutationObserver(() => {
+    const isOpen = !panel.classList.contains('fx-panel-closed');
+    localStorage.setItem('vizmix_fx_panel_open', isOpen.toString());
+  });
+  observer.observe(panel, { attributes: true, attributeFilter: ['class'] });
 }
 
 /**

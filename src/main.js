@@ -129,6 +129,12 @@ let currentCrossfadeValue = 0;
 let dimmerA = 1.0;
 let dimmerB = 1.0;
 
+/** チャンネルプレビューにディマー値を brightness フィルタで反映 */
+function applyDimmerPreview(ch, value) {
+  const box = document.getElementById(`preview${ch}`);
+  if (box) box.style.filter = `brightness(${value})`;
+}
+
 // BPM Flash state
 let flashEnabled = false;
 let flashDivisor = 4; // 1/4 beat pattern
@@ -356,12 +362,14 @@ function initUI() {
     dimmerASlider.addEventListener('input', (e) => {
       dimmerA = parseInt(e.target.value) / 100;
       if (dimmerAValue) dimmerAValue.textContent = e.target.value;
+      applyDimmerPreview('A', dimmerA);
     });
   }
   if (dimmerBSlider) {
     dimmerBSlider.addEventListener('input', (e) => {
       dimmerB = parseInt(e.target.value) / 100;
       if (dimmerBValue) dimmerBValue.textContent = e.target.value;
+      applyDimmerPreview('B', dimmerB);
     });
   }
 
@@ -439,8 +447,23 @@ function initPlaybackControls() {
     }
 
     if (seekBar) {
-      seekBar.addEventListener('mousedown', () => { seekDragging[ch] = true; });
-      seekBar.addEventListener('touchstart', () => { seekDragging[ch] = true; });
+      const pauseOnSeek = () => {
+        seekDragging[ch] = true;
+        const vc = ch === 'A' ? videoManager.channelA : videoManager.channelB;
+        if (vc.currentSourceType === 'shader') return;
+        const video = vc.video;
+        if (!video) return;
+        video.pause();
+        vc.playbackState = 'pause';
+        // 再生ボタンUIを更新
+        const ppBtn = document.querySelector(`#playback${ch} .play-pause-toggle`);
+        if (ppBtn) {
+          ppBtn.textContent = '\u25B6';
+          ppBtn.classList.add('paused');
+        }
+      };
+      seekBar.addEventListener('mousedown', pauseOnSeek);
+      seekBar.addEventListener('touchstart', pauseOnSeek);
       seekBar.addEventListener('input', () => {
         const vc = ch === 'A' ? videoManager.channelA : videoManager.channelB;
         if (vc.currentSourceType === 'shader') return;
@@ -1035,6 +1058,7 @@ async function initMidiController() {
       const valEl = document.getElementById('dimmerAValue');
       if (slider) slider.value = value;
       if (valEl) valEl.textContent = value;
+      applyDimmerPreview('A', dimmerA);
     },
     dimmerB: (value) => {
       dimmerB = value / 100;
@@ -1042,6 +1066,7 @@ async function initMidiController() {
       const valEl = document.getElementById('dimmerBValue');
       if (slider) slider.value = value;
       if (valEl) valEl.textContent = value;
+      applyDimmerPreview('B', dimmerB);
     },
     bpm: (value) => {
       const newBpm = setBPM(value);
@@ -1692,7 +1717,7 @@ async function initPlayCanvas() {
   const container = canvas.parentElement;
 
   app = new pc.Application(canvas, {
-    graphicsDeviceOptions: { alpha: true },
+    graphicsDeviceOptions: { alpha: true, preserveDrawingBuffer: true },
   });
 
   app.setCanvasFillMode(pc.FILLMODE_NONE);
