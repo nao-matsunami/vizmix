@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  #canvas {
+    position: relative;
+    width: 1024px;
+    height: 1024px;
+    background: transparent;
+  }
+  /* 純黒の角丸正方形タイル（macOS Big Sur グリッド: 824x824 / 余白100 / 角丸約180） */
+  #tile {
+    position: absolute;
+    left: 100px;
+    top: 100px;
+    width: 824px;
+    height: 824px;
+    background: #0a0a0a;
+    border-radius: 180px;
+  }
+  /* 大きな白い V（Helvetica Neue Bold、cap-height ≒ タイル高さの55%） */
+  #v {
+    position: absolute;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 700;
+    color: #ffffff;
+    line-height: 1;
+    /* font-size と top はラスタライズ結果を見て微調整 */
+    font-size: 620px;
+    top: -40px;
+  }
+  /* 横フェーダー：細い横レール（角丸端）。座標は #tile 相対（タイル 824x824） */
+  #rail {
+    position: absolute;
+    left: 222px;       /* center x = 412 (tile中央), width 380 */
+    top: 670px;        /* center y = 676 (タイル下端から約18%) */
+    width: 380px;
+    height: 12px;
+    background: #4a4a4a;
+    border-radius: 6px;
+  }
+  /* ソリッドな直角の白い四角ノブ（角丸なし, 縦60 x 横20, レール中央） */
+  #knob {
+    position: absolute;
+    left: 402px;       /* center x = 412 */
+    top: 646px;        /* center y = 676 */
+    width: 20px;
+    height: 60px;
+    background: #ffffff;
+    border-radius: 0;
+  }
+</style>
+</head>
+<body>
+  <div id="canvas">
+    <div id="tile">
+      <div id="v">V</div>
+      <div id="rail"></div>
+      <div id="knob"></div>
+    </div>
+  </div>
+</body>
+</html>
