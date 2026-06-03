@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "electron:dev": "ELECTRON_DEV=1 concurrently -k -s first \"vite\" \"wait-on tcp:3000 && electron .\"",
+    "electron:dev": "ELECTRON_DEV=1 concurrently -k -s first \"vite --no-open\" \"wait-on tcp:3000 && electron .\"",
     "electron:start": "electron .",
     "dist:mac": "vite build && electron-builder --mac --arm64"
   },

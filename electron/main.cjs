@@ -33,6 +33,42 @@ const sharedWebPreferences = {
   backgroundThrottling: false,
 };
 
+// マニュアル（public/manual/index.html）をアプリ内の専用ウィンドウで開く。
+// ディレクトリURL（.../manual/）は file:// では index 解決されないため index.html を明示。
+// パッケージ版では app.asar 内のため loadFile（Electronのfileプロトコル）で読む。
+function openManualWindow() {
+  const manual = new BrowserWindow({
+    width: 1100,
+    height: 800,
+    title: "VizMix - Manual",
+    backgroundColor: "#ffffff",
+    webPreferences: sharedWebPreferences,
+  });
+
+  // 言語選択ページのリンクは `en/` `ja/` というディレクトリ形式。
+  // Vite dev も file:// も末尾スラッシュの index 解決をしないため 404 になる。
+  // ディレクトリ遷移を index.html に書き換えてから読み込む（dev/packaged 共通）。
+  manual.webContents.on("will-navigate", (e, target) => {
+    let u;
+    try {
+      u = new URL(target);
+    } catch {
+      return;
+    }
+    if (u.pathname.endsWith("/")) {
+      e.preventDefault();
+      u.pathname += "index.html";
+      manual.loadURL(u.href);
+    }
+  });
+
+  if (isDev) {
+    manual.loadURL(`${DEV_URL}/manual/index.html`);
+  } else {
+    manual.loadFile(path.join(__dirname, "..", "dist", "manual", "index.html"));
+  }
+}
+
 function createControlWindow() {
   const win = new BrowserWindow({
     width: 1440,
@@ -42,27 +78,37 @@ function createControlWindow() {
     webPreferences: sharedWebPreferences,
   });
 
-  // 出力ウィンドウ（window.open('./output.html')）を新規 BrowserWindow として開く。
-  // 同origin（dev: localhost:3000 / prod: file://）は内部ウィンドウ、
-  // それ以外の外部URLは既定ブラウザへ委譲する。
+  // window.open / target=_blank で開かれるURLを内容で振り分ける。
+  //   1) public/manual/ 配下      → アプリ内の専用マニュアルウィンドウ
+  //   2) output.html              → 出力ウィンドウ（captureStream/opener ハンドシェイク維持）
+  //   3) それ以外の外部URL(http等) → 既定ブラウザ
+  // （旧実装は file:// を一律「出力ウィンドウ」扱いし、マニュアルまで巻き込んでいた）
   win.webContents.setWindowOpenHandler(({ url }) => {
-    const isInternal = isDev
-      ? url.startsWith(DEV_URL)
-      : url.startsWith("file://");
-    if (!isInternal) {
-      shell.openExternal(url);
+    // 1) マニュアル: asar 同梱のため外部ブラウザでは file:// を読めない。
+    //    アプリ内ウィンドウで index.html を明示ロードする。
+    if (/\/manual(\/|$|\?|#)/.test(url)) {
+      openManualWindow();
       return { action: "deny" };
     }
-    return {
-      action: "allow",
-      overrideBrowserWindowOptions: {
-        width: 1280,
-        height: 720,
-        title: "VizMix - Output",
-        backgroundColor: "#000000",
-        webPreferences: sharedWebPreferences,
-      },
-    };
+
+    // 2) 出力ウィンドウ: v1.0 の同期アーキ（e.source/opener の DOM 操作 +
+    //    captureStream）が成立するよう、同origin・同webPreferencesで開く。挙動は不変。
+    if (/output\.html(\?|#|$)/.test(url)) {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          width: 1280,
+          height: 720,
+          title: "VizMix - Output",
+          backgroundColor: "#000000",
+          webPreferences: sharedWebPreferences,
+        },
+      };
+    }
+
+    // 3) その他（外部http/https 等）→ 既定ブラウザへ委譲
+    shell.openExternal(url);
+    return { action: "deny" };
   });
 
   if (isDev) {
