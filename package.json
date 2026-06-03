@@ -1,12 +1,16 @@
 {
   "name": "vizmix",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "description": "VizMix - Browser-based VJ Software",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:dev": "ELECTRON_DEV=1 concurrently -k -s first \"vite\" \"wait-on tcp:3000 && electron .\"",
+    "electron:start": "electron .",
+    "dist:mac": "vite build && electron-builder --mac --arm64"
   },
   "keywords": [
     "vj",
@@ -20,6 +24,31 @@
     "playcanvas": "^2.14.4"
   },
   "devDependencies": {
-    "vite": "^6.0.0"
+    "concurrently": "^9.2.1",
+    "electron": "^42.3.2",
+    "electron-builder": "^26.8.1",
+    "vite": "^6.0.0",
+    "wait-on": "^8.0.5"
+  },
+  "build": {
+    "appId": "com.antymark.vizmix",
+    "productName": "VizMix",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": "arm64"
+        }
+      ],
+      "identity": null,
+      "category": "public.app-category.video"
+    }
   }
 }

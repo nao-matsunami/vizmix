@@ -4,6 +4,9 @@ node_modules/
 # Build output
 dist/
 
+# Electron build output (electron-builder)
+release/
+
 # IDE
 .vscode/
 .idea/
