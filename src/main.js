@@ -2074,6 +2074,14 @@ async function handleCameraSelect(channel, deviceId) {
 
 init();
 
+// PWA (offline App Shell, install prompt) is built only when VIZMIX_PWA=1.
+// __PWA__ is statically replaced by Vite; when false this branch and src/pwa.js
+// (with its virtual:pwa-register import) are tree-shaken out, so the free web
+// build and the Electron buy-version ship no service worker.
+if (__PWA__) {
+  import("./pwa.js").then((m) => m.initPWA()).catch((e) => console.warn("[PWA]", e));
+}
+
 // Debug globals
 window.videoManager = videoManager;
 window.getPlaneA = () => planeA;
