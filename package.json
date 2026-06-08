@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "electron:dev": "ELECTRON_DEV=1 concurrently -k -s first \"vite --no-open\" \"wait-on tcp:3000 && electron .\"",
     "electron:start": "electron .",
-    "dist:mac": "vite build && electron-builder --mac --arm64"
+    "dist:mac": "vite build && electron-builder --mac",
+    "dist:win": "vite build && electron-builder --win",
+    "dist:linux": "vite build && electron-builder --linux",
+    "dist:all": "vite build && electron-builder -mwl"
   },
   "keywords": [
     "vj",
@@ -41,15 +44,35 @@
       "dist/**/*",
       "electron/**/*"
     ],
+    "afterPack": "electron/afterPack.cjs",
     "mac": {
       "target": [
-        {
-          "target": "dmg",
-          "arch": "arm64"
-        }
+        { "target": "dmg", "arch": "universal" },
+        { "target": "zip", "arch": "universal" }
       ],
       "identity": null,
       "category": "public.app-category.video"
+    },
+    "dmg": {
+      "writeUpdateInfo": false
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": "x64" },
+        { "target": "zip", "arch": "x64" }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": "x64" }
+      ],
+      "category": "AudioVideo",
+      "synopsis": "Browser-based VJ software"
     }
   }
 }
