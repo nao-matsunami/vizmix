@@ -30,6 +30,22 @@ const effectDefinitions = {
       { name: 'Amount', key: 'amount', min: 0, max: 100, default: 100, unit: '%' }
     ]
   },
+  saturate: {
+    name: 'Saturate',
+    category: 'Color',
+    type: 'continuous',
+    params: [
+      { name: 'Amount', key: 'amount', min: 0, max: 200, default: 100, unit: '%' }
+    ]
+  },
+  hueRotate: {
+    name: 'Hue Rotate',
+    category: 'Color',
+    type: 'continuous',
+    params: [
+      { name: 'Angle', key: 'amount', min: 0, max: 360, default: 0, unit: '°' }
+    ]
+  },
   blur: {
     name: 'Blur',
     category: 'Blur',

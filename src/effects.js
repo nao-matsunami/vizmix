@@ -8,6 +8,8 @@ export const effectsState = {
   invert: { enabled: false },
   grayscale: { enabled: false, amount: 0 },   // 0-100
   sepia: { enabled: false, amount: 0 },       // 0-100
+  saturate: { amount: 100 },                   // 0-200 (100=neutral)
+  hueRotate: { amount: 0 },                    // 0-360 deg
   blur: { amount: 0 },                         // 0-100
   brightness: { amount: 0 },                   // -100 to +100
   contrast: { amount: 0 },                     // -100 to +100
@@ -100,6 +102,12 @@ export function resetEffect(effectName) {
       effectsState.sepia.enabled = false;
       effectsState.sepia.amount = 0;
       break;
+    case 'saturate':
+      effectsState.saturate.amount = 100;
+      break;
+    case 'hueRotate':
+      effectsState.hueRotate.amount = 0;
+      break;
     case 'blur':
       effectsState.blur.amount = 0;
       break;
@@ -128,6 +136,8 @@ export function resetAllEffects() {
   effectsState.grayscale.amount = 0;
   effectsState.sepia.enabled = false;
   effectsState.sepia.amount = 0;
+  effectsState.saturate.amount = 100;
+  effectsState.hueRotate.amount = 0;
   effectsState.blur.amount = 0;
   effectsState.brightness.amount = 0;
   effectsState.contrast.amount = 0;
@@ -143,6 +153,8 @@ export function getEffectParams() {
     invert: effectsState.invert.enabled ? 1.0 : 0.0,
     grayscale: effectsState.grayscale.enabled ? effectsState.grayscale.amount / 100 : 0.0,
     sepia: effectsState.sepia.enabled ? effectsState.sepia.amount / 100 : 0.0,
+    saturate: effectsState.saturate.amount / 100,   // 0..2 (1=neutral)
+    hueRotate: effectsState.hueRotate.amount,        // degrees
     blur: effectsState.blur.amount / 100,
     brightness: effectsState.brightness.amount / 100,
     contrast: effectsState.contrast.amount / 100,
