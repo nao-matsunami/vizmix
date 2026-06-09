@@ -43,11 +43,13 @@ import {
   setRgbMultiplyAmount,
   setRgbMultiplyColor,
   resetEffect,
+  resetAllEffects,
   getEffectParams,
 } from "./effects.js";
 import { videoManager, setVideoSource, setShaderSource, setShaderDefaults, setShaderRawSource, getShaderRawSource, getSourceType, getShaderVersion } from "./videoManager.js";
 import { MasterEffectChain } from "./masterEffect.js";
 import { EFFECT_ISF, buildActiveChain } from "./effectLibrary.js";
+import { runBenchmark, generateStaticTexture } from "./benchmark.js";
 import { ShaderPreviewRenderer } from "./shaderPreview.js";
 import {
   bpmState,
@@ -1855,6 +1857,77 @@ async function initPlayCanvas() {
   setTimeout(() => { updatePlaneSize(); updateOutputPlaneSize(); }, 100);
 
   setupChannelPreviews();
+
+  maybeStartBenchmark();
+}
+
+// ── 自動ベンチマーク (?benchmark=1) ───────────────────────────────────────────
+function applyBenchmarkEffect(name) {
+  resetAllEffects();
+  switch (name) {
+    case "none": break;
+    case "brightness": effectsState.brightness.amount = 60; break;
+    case "contrast": effectsState.contrast.amount = 50; break;
+    case "saturate": effectsState.saturate.amount = 180; break;
+    case "hueRotate": effectsState.hueRotate.amount = 120; break;
+    case "grayscale": effectsState.grayscale.enabled = true; effectsState.grayscale.amount = 100; break;
+    case "sepia": effectsState.sepia.enabled = true; effectsState.sepia.amount = 100; break;
+    case "invert": effectsState.invert.enabled = true; break;
+    case "blur": effectsState.blur.amount = 50; break;
+    case "rgbShift": effectsState.rgbShift.amount = 60; break;
+    case "glitch": effectsState.glitch.amount = 50; break;
+    case "rgbMultiply": effectsState.rgbMultiply.amount = 70; break;
+    case "all":
+      effectsState.brightness.amount = 30; effectsState.contrast.amount = 30;
+      effectsState.saturate.amount = 160; effectsState.hueRotate.amount = 60;
+      effectsState.blur.amount = 40; effectsState.rgbShift.amount = 50;
+      effectsState.glitch.amount = 40; break;
+  }
+}
+
+async function setBenchmarkMaterial(type) {
+  // チャンネルA のみを評価対象にする
+  currentCrossfadeValue = 0;
+  setCrossfade(0);
+  const crossfader = document.getElementById("crossfader");
+  if (crossfader) crossfader.value = 0;
+
+  if (type === "image") {
+    if (!window.__benchStaticTex) window.__benchStaticTex = generateStaticTexture(app.graphicsDevice);
+    videoManager.setStaticTexture("A", window.__benchStaticTex);
+  } else if (type === "shader") {
+    videoManager.setStaticTexture("A", null);
+    try {
+      const code = await (await fetch("./shaders/02_grid_landscape.glsl")).text();
+      setShaderSource("A", 0, code, "bench_grid");
+      videoManager.setChannelSource("A", 0);
+      setChannelSource("A", "shader", 0);
+    } catch (e) { console.warn("[Benchmark] shader load failed", e); }
+  } else { // video
+    videoManager.setStaticTexture("A", null);
+    videoManager.setChannelSource("A", 0);
+    setChannelSource("A", "video", 0);
+  }
+  await new Promise((r) => setTimeout(r, 600));
+}
+
+function maybeStartBenchmark() {
+  const q = new URLSearchParams(location.search);
+  if (q.get("benchmark") !== "1") return;
+  const durationSec = parseInt(q.get("dur") || "8", 10);
+  console.log(`[Benchmark] starting (dur=${durationSec}s)…`);
+  setTimeout(() => {
+    runBenchmark({
+      durationSec,
+      setResolution: async (key) => { applyOutputResolution(key); await new Promise((r) => setTimeout(r, 500)); },
+      applyEffect: applyBenchmarkEffect,
+      setMaterial: setBenchmarkMaterial,
+      getEnvStats: () => ({
+        resolution: `${currentOutputWidth}x${currentOutputHeight}`,
+        heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null,
+      }),
+    });
+  }, 3000); // 動画ロード待ち
 }
 
 function setupChannelPreviews() {
