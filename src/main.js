@@ -2120,6 +2120,29 @@ init();
 // build and the Electron buy-version ship no service worker.
 if (__PWA__) {
   import("./pwa.js").then((m) => m.initPWA()).catch((e) => console.warn("[PWA]", e));
+} else {
+  // 非PWAビルド (無料web版 / Electron) のキルスイッチ。
+  // 過去に VIZMIX_PWA=1 版を配信していた場合、ブラウザにはオリジン単位で
+  // Service Worker が残存し、古い app-shell + manifest を配信して
+  // インストールプロンプトが出続ける。ここで登録済み SW とそのキャッシュを
+  // 除去する。__PWA__ が真 (裏フラグ有効) のときはこの分岐ごと tree-shake
+  // されるため動かない。PWA 資産 (pwa.js / vite.config / アイコン) は削除しない。
+  (async () => {
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) await reg.unregister();
+        if (regs.length) console.log(`[PWA killswitch] unregistered ${regs.length} service worker(s)`);
+      }
+      if (window.caches && caches.keys) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+        if (keys.length) console.log(`[PWA killswitch] cleared ${keys.length} cache(s)`);
+      }
+    } catch (e) {
+      console.warn("[PWA killswitch]", e);
+    }
+  })();
 }
 
 // Debug globals
