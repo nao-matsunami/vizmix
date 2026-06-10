@@ -5,7 +5,7 @@
  */
 
 import { initBroadcast } from "./mixer.js";
-import { deserializeEffectsState, getEffectParams } from "./effects.js";
+import { deserializeEffectsState } from "./effects.js";
 
 const video = document.getElementById('output');
 
@@ -13,20 +13,9 @@ const video = document.getElementById('output');
 let streamConnected = false;
 
 // ─── エフェクト適用 ───────────────────────────────────────────────────────────
-
-function applyEffectsToVideo() {
-  const params = getEffectParams();
-  const filters = [];
-
-  if (params.invert > 0.5)      filters.push('invert(1)');
-  if (params.grayscale > 0)     filters.push(`grayscale(${params.grayscale})`);
-  if (params.sepia > 0)         filters.push(`sepia(${params.sepia})`);
-  if (params.blur > 0)          filters.push(`blur(${params.blur * 10}px)`);
-  if (params.brightness !== 0)  filters.push(`brightness(${1 + params.brightness})`);
-  if (params.contrast !== 0)    filters.push(`contrast(${1 + params.contrast})`);
-
-  video.style.filter = filters.length > 0 ? filters.join(' ') : 'none';
-}
+// エフェクトは Control 側で GLSL ISF チェーンにより canvas 画素に焼き込まれ、
+// captureStream 経由でそのまま届く。出力側での CSS 再適用は不要 (撤去)。
+// glitch 等も初めて出力に反映される。
 
 // ─── Control → Output postMessage 受信 ───────────────────────────────────────
 
@@ -41,9 +30,10 @@ window.addEventListener('message', (e) => {
 
 function handleMessage(data) {
   if (data.type === 'effects') {
+    // エフェクトは Control 側で canvas 画素に焼き込まれ captureStream で届くため、
+    // 出力側での再適用は不要。状態は一応保持しておく。
     if (data.effects) {
       deserializeEffectsState(data.effects);
-      applyEffectsToVideo();
     }
   } else if (data.type === 'reset') {
     console.log('Output: Received reset, reloading...');

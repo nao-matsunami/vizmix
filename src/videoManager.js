@@ -198,6 +198,7 @@ class VideoChannel {
     this.currentShaderVersion = -1;
     this.playbackState = 'play';
     this.reverseRAF = null;
+    this.staticTexture = null; // ベンチマーク用静止画 (set されると update がこれを使う)
   }
 
   async init(device, initialIndex = 0) {
@@ -366,6 +367,11 @@ class VideoChannel {
   }
 
   update() {
+    // ベンチマーク用の静止画テクスチャ (アップロード1回・毎フレーム処理なし)
+    if (this.staticTexture) {
+      this.texture = this.staticTexture;
+      return;
+    }
     if (this.currentSourceType === 'shader' && this.shaderSource) {
       this.shaderSource.render();
       this.texture = this.shaderSource.getTexture();
@@ -586,6 +592,13 @@ export class VideoManager {
 
   getTextureB() {
     return this.channelB.texture;
+  }
+
+  /** ベンチマーク用: チャンネルに静止画テクスチャを固定 (null で解除) */
+  setStaticTexture(channel, texture) {
+    const ch = channel === 'A' ? this.channelA : this.channelB;
+    ch.staticTexture = texture;
+    if (texture) { ch.texture = texture; if (ch.video) ch.video.pause(); }
   }
 
   playAll() {

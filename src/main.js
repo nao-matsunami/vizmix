@@ -43,9 +43,13 @@ import {
   setRgbMultiplyAmount,
   setRgbMultiplyColor,
   resetEffect,
+  resetAllEffects,
   getEffectParams,
 } from "./effects.js";
 import { videoManager, setVideoSource, setShaderSource, setShaderDefaults, setShaderRawSource, getShaderRawSource, getSourceType, getShaderVersion } from "./videoManager.js";
+import { MasterEffectChain } from "./masterEffect.js";
+import { EFFECT_ISF, buildActiveChain } from "./effectLibrary.js";
+import { runBenchmark, generateStaticTexture } from "./benchmark.js";
 import { ShaderPreviewRenderer } from "./shaderPreview.js";
 import {
   bpmState,
@@ -99,6 +103,16 @@ function applyOutputResolution(key) {
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     canvas.style.objectFit = 'contain';
+    // Master FBO / エフェクトチェーンも追従させ、各 RT/テクスチャ参照を貼り直す
+    if (masterEffect) {
+      masterEffect.resize(currentOutputWidth, currentOutputHeight);
+      if (camera) camera.camera.renderTarget = masterEffect.getMasterRenderTarget();
+      if (outputMaterial) {
+        outputMaterial.emissiveMap = masterEffect.getOutputTexture();
+        outputMaterial.update();
+      }
+      updateOutputPlaneSize();
+    }
     console.log(`Output resolution: ${currentOutputWidth}x${currentOutputHeight}`);
   }
   localStorage.setItem(OUTPUT_RESOLUTION_KEY, key);
@@ -119,6 +133,11 @@ let webcamManager = null;
 const channelSourceMode = { A: 'media', B: 'media' }; // 'media' or 'cam'
 let outputWindow = null;
 let app = null;
+let masterEffect = null;      // マスター出力 ISF エフェクトチェーン
+let benchmarkOverrideChain = null; // ベンチ時に強制適用するチェーン (null=通常)
+let outputCamera = null;      // final FBO を canvas に表示するカメラ
+let outputPlane = null;
+let outputMaterial = null;
 let planeA = null;
 let planeB = null;
 let materialA = null;
@@ -877,123 +896,16 @@ function initKeyboardShortcuts() {
   });
 }
 
-// Glitchエフェクト用オーバーレイcanvas
-let glitchOverlay = null;
-let glitchCtx = null;
-
-function ensureGlitchOverlay() {
-  const masterCanvas = document.getElementById('canvasMaster');
-  if (!masterCanvas) return null;
-  if (!glitchOverlay) {
-    glitchOverlay = document.createElement('canvas');
-    glitchOverlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;';
-    masterCanvas.parentElement.appendChild(glitchOverlay);
-    glitchCtx = glitchOverlay.getContext('2d', { willReadFrequently: true });
-  }
-  // サイズ同期
-  if (glitchOverlay.width !== masterCanvas.width || glitchOverlay.height !== masterCanvas.height) {
-    glitchOverlay.width = masterCanvas.width;
-    glitchOverlay.height = masterCanvas.height;
-  }
-  return glitchCtx;
-}
-
-// Master Outputにエフェクトを適用
+// エフェクトは GLSL ISF チェーン (masterEffect) で canvas 画素に焼き込まれるため、
+// 旧 CSS フィルタ + Glitch 2D オーバーレイ実装は撤去。canvasMaster に CSS フィルタが
+// 残らないよう一度だけ none に戻すだけにする。
+let _cssFilterCleared = false;
 function applyEffectsToCanvas() {
+  if (_cssFilterCleared) return;
   const canvas = document.getElementById('canvasMaster');
-  if (!canvas) return;
-
-  const params = getEffectParams();
-
-  let filters = [];
-
-  if (params.invert > 0.5) filters.push('invert(1)');
-  if (params.grayscale > 0) filters.push(`grayscale(${params.grayscale})`);
-  if (params.sepia > 0) filters.push(`sepia(${params.sepia})`);
-  if (params.blur > 0) filters.push(`blur(${params.blur * 10}px)`);
-  if (params.brightness !== 0) filters.push(`brightness(${1 + params.brightness})`);
-  if (params.contrast !== 0) filters.push(`contrast(${1 + params.contrast})`);
-
-  canvas.style.filter = filters.length > 0 ? filters.join(' ') : 'none';
-
-  // Glitch系エフェクト（Canvas 2Dオーバーレイ）
-  const needsGlitch = params.glitch > 0 || params.rgbShift > 0 || params.rgbMultiply > 0;
-  if (needsGlitch) {
-    const ctx = ensureGlitchOverlay();
-    if (!ctx) return;
-    const w = glitchOverlay.width;
-    const h = glitchOverlay.height;
-    ctx.clearRect(0, 0, w, h);
-
-    // RGB Shift: draw the source with offset channels
-    if (params.rgbShift > 0) {
-      const shift = Math.round(params.rgbShift * w * 0.02);
-      ctx.globalCompositeOperation = 'source-over';
-      // Red channel (shifted right)
-      ctx.drawImage(canvas, 0, 0, w, h);
-      const imgData = ctx.getImageData(0, 0, w, h);
-      const srcData = ctx.getImageData(0, 0, w, h);
-      const d = imgData.data;
-      const s = srcData.data;
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const idx = (y * w + x) * 4;
-          // Red from shifted position
-          const rx = Math.min(w - 1, Math.max(0, x + shift));
-          const rIdx = (y * w + rx) * 4;
-          d[idx] = s[rIdx]; // R
-          // Green stays
-          d[idx + 1] = s[idx + 1]; // G
-          // Blue from opposite shift
-          const bx = Math.min(w - 1, Math.max(0, x - shift));
-          const bIdx = (y * w + bx) * 4;
-          d[idx + 2] = s[bIdx + 2]; // B
-          d[idx + 3] = 255;
-        }
-      }
-      ctx.putImageData(imgData, 0, 0);
-    }
-
-    // Glitch: horizontal slice displacement
-    if (params.glitch > 0) {
-      if (params.rgbShift <= 0) {
-        ctx.drawImage(canvas, 0, 0, w, h);
-      }
-      const imgData = ctx.getImageData(0, 0, w, h);
-      const clone = new Uint8ClampedArray(imgData.data);
-      const sliceCount = Math.floor(params.glitch * 20) + 1;
-      const t = performance.now() * 0.001;
-      for (let s = 0; s < sliceCount; s++) {
-        const sliceY = Math.floor(Math.abs(Math.sin(t * 3.7 + s * 1.3)) * h);
-        const sliceH = Math.floor(Math.abs(Math.sin(t * 5.1 + s * 2.1)) * 20) + 2;
-        const offset = Math.floor((Math.sin(t * 10.0 + s * 7.3) * params.glitch * w * 0.1));
-        for (let y = sliceY; y < Math.min(h, sliceY + sliceH); y++) {
-          for (let x = 0; x < w; x++) {
-            const srcX = Math.min(w - 1, Math.max(0, x - offset));
-            const dstIdx = (y * w + x) * 4;
-            const srcIdx = (y * w + srcX) * 4;
-            imgData.data[dstIdx] = clone[srcIdx];
-            imgData.data[dstIdx + 1] = clone[srcIdx + 1];
-            imgData.data[dstIdx + 2] = clone[srcIdx + 2];
-          }
-        }
-      }
-      ctx.putImageData(imgData, 0, 0);
-    }
-
-    // RGB Multiply: tint overlay
-    if (params.rgbMultiply > 0) {
-      ctx.globalCompositeOperation = 'multiply';
-      ctx.globalAlpha = params.rgbMultiply;
-      ctx.fillStyle = params.rgbMultiplyColor;
-      ctx.fillRect(0, 0, w, h);
-      ctx.globalAlpha = 1.0;
-      ctx.globalCompositeOperation = 'source-over';
-    }
-
-    glitchOverlay.style.display = 'block';
-  } else if (glitchOverlay) {
-    glitchOverlay.style.display = 'none';
+  if (canvas) {
+    canvas.style.filter = 'none';
+    _cssFilterCleared = true;
   }
 }
 
@@ -1664,6 +1576,15 @@ function createVideoPlane(name, zPosition) {
   return { entity: plane, material: material };
 }
 
+// 出力プレーンを出力カメラのビューに全画面フィット (final FBO は canvas と同アスペクト)
+function updateOutputPlaneSize() {
+  if (!outputPlane || !outputCamera) return;
+  const aspect = outputCamera.camera.aspectRatio;
+  const h = outputCamera.camera.orthoHeight * 2;
+  const w = h * aspect;
+  outputPlane.setLocalScale(w, 1, -h);
+}
+
 function updatePlaneSize() {
   if (!planeA || !planeB || !camera) return;
 
@@ -1763,6 +1684,47 @@ async function initPlayCanvas() {
 
   app.root.addChild(planeA);
   app.root.addChild(planeB);
+
+  // マスター出力 ISF エフェクトチェーンを初期化。
+  // 構成: シーンカメラが planeA/B を Master FBO に描画 → postrender でエフェクト
+  // チェーンを final FBO へ → 出力カメラが出力プレーン(final)を canvas に描画。
+  // captureStream は canvas をそのまま拾う。
+  masterEffect = new MasterEffectChain(device).init(currentOutputWidth, currentOutputHeight);
+  for (const [name, src] of Object.entries(EFFECT_ISF)) {
+    const ok = masterEffect.registerEffect(name, src);
+    if (!ok) console.error(`[Effect] ISF compile failed: ${name}`);
+  }
+  window.__masterEffect = masterEffect; // debug / benchmark
+
+  // レイヤー構成: シーン(planeA/B)=World、出力プレーン=OutputFX
+  const worldLayer = app.scene.layers.getLayerByName("World");
+  const outputLayer = new pc.Layer({ name: "OutputFX" });
+  app.scene.layers.push(outputLayer);
+
+  // シーンカメラ: World のみを Master FBO に描画
+  camera.camera.layers = [worldLayer.id];
+  camera.camera.renderTarget = masterEffect.getMasterRenderTarget();
+
+  // 出力カメラ: OutputFX のみを canvas に描画 (シーンカメラの後)
+  outputCamera = new pc.Entity("outputCamera");
+  outputCamera.addComponent("camera", {
+    clearColor: new pc.Color(0, 0, 0),
+    projection: pc.PROJECTION_ORTHOGRAPHIC,
+    orthoHeight: 1,
+    layers: [outputLayer.id],
+    priority: 1,
+  });
+  outputCamera.setPosition(0, 0, 1);
+  app.root.addChild(outputCamera);
+
+  // 出力プレーン: final FBO テクスチャを全画面表示
+  const outRes = createVideoPlane("OutputPlane", 0);
+  outputPlane = outRes.entity;
+  outputMaterial = outRes.material;
+  outputPlane.render.layers = [outputLayer.id];
+  outputMaterial.emissiveMap = masterEffect.getOutputTexture();
+  outputMaterial.update();
+  app.root.addChild(outputPlane);
 
   currentCrossfadeValue = state.crossfade;
 
@@ -1883,11 +1845,91 @@ async function initPlayCanvas() {
     }
   });
 
+  // シーン描画後: Master FBO に ISF エフェクトチェーンを適用して canvas へ出力。
+  app.on("postrender", function () {
+    if (!masterEffect) return;
+    const chain = benchmarkOverrideChain || buildActiveChain(getEffectParams());
+    masterEffect.apply(chain, performance.now() / 1000);
+  });
+
   app.start();
 
-  setTimeout(updatePlaneSize, 100);
+  setTimeout(() => { updatePlaneSize(); updateOutputPlaneSize(); }, 100);
 
   setupChannelPreviews();
+
+  maybeStartBenchmark();
+}
+
+// ── 自動ベンチマーク (?benchmark=1) ───────────────────────────────────────────
+function applyBenchmarkEffect(name) {
+  resetAllEffects();
+  switch (name) {
+    case "none": break;
+    case "brightness": effectsState.brightness.amount = 60; break;
+    case "contrast": effectsState.contrast.amount = 50; break;
+    case "saturate": effectsState.saturate.amount = 180; break;
+    case "hueRotate": effectsState.hueRotate.amount = 120; break;
+    case "grayscale": effectsState.grayscale.enabled = true; effectsState.grayscale.amount = 100; break;
+    case "sepia": effectsState.sepia.enabled = true; effectsState.sepia.amount = 100; break;
+    case "invert": effectsState.invert.enabled = true; break;
+    case "blur": effectsState.blur.amount = 50; break;
+    case "rgbShift": effectsState.rgbShift.amount = 60; break;
+    case "glitch": effectsState.glitch.amount = 50; break;
+    case "rgbMultiply": effectsState.rgbMultiply.amount = 70; break;
+    case "all":
+      effectsState.brightness.amount = 30; effectsState.contrast.amount = 30;
+      effectsState.saturate.amount = 160; effectsState.hueRotate.amount = 60;
+      effectsState.blur.amount = 40; effectsState.rgbShift.amount = 50;
+      effectsState.glitch.amount = 40; break;
+  }
+}
+
+async function setBenchmarkMaterial(type) {
+  // チャンネルA のみを評価対象にする
+  currentCrossfadeValue = 0;
+  setCrossfade(0);
+  const crossfader = document.getElementById("crossfader");
+  if (crossfader) crossfader.value = 0;
+
+  if (type === "image") {
+    if (!window.__benchStaticTex) window.__benchStaticTex = generateStaticTexture(app.graphicsDevice);
+    videoManager.setStaticTexture("A", window.__benchStaticTex);
+  } else if (type === "shader") {
+    videoManager.setStaticTexture("A", null);
+    try {
+      const code = await (await fetch("./shaders/02_grid_landscape.glsl")).text();
+      setShaderSource("A", 0, code, "bench_grid");
+      videoManager.setChannelSource("A", 0);
+      setChannelSource("A", "shader", 0);
+    } catch (e) { console.warn("[Benchmark] shader load failed", e); }
+  } else { // video
+    videoManager.setStaticTexture("A", null);
+    videoManager.setChannelSource("A", 0);
+    setChannelSource("A", "video", 0);
+  }
+  await new Promise((r) => setTimeout(r, 600));
+}
+
+function maybeStartBenchmark() {
+  const q = new URLSearchParams(location.search);
+  if (q.get("benchmark") !== "1") return;
+  const durationSec = parseInt(q.get("dur") || "8", 10);
+  const warmupSec = parseFloat(q.get("warmup") || "1");
+  console.log(`[Benchmark] starting (dur=${durationSec}s, warmup=${warmupSec}s)…`);
+  setTimeout(() => {
+    runBenchmark({
+      durationSec,
+      warmupSec,
+      setResolution: async (key) => { applyOutputResolution(key); await new Promise((r) => setTimeout(r, 500)); },
+      applyEffect: applyBenchmarkEffect,
+      setMaterial: setBenchmarkMaterial,
+      getEnvStats: () => ({
+        resolution: `${currentOutputWidth}x${currentOutputHeight}`,
+        heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null,
+      }),
+    });
+  }, 3000); // 動画ロード待ち
 }
 
 function setupChannelPreviews() {
@@ -2080,6 +2122,29 @@ init();
 // build and the Electron buy-version ship no service worker.
 if (__PWA__) {
   import("./pwa.js").then((m) => m.initPWA()).catch((e) => console.warn("[PWA]", e));
+} else {
+  // 非PWAビルド (無料web版 / Electron) のキルスイッチ。
+  // 過去に VIZMIX_PWA=1 版を配信していた場合、ブラウザにはオリジン単位で
+  // Service Worker が残存し、古い app-shell + manifest を配信して
+  // インストールプロンプトが出続ける。ここで登録済み SW とそのキャッシュを
+  // 除去する。__PWA__ が真 (裏フラグ有効) のときはこの分岐ごと tree-shake
+  // されるため動かない。PWA 資産 (pwa.js / vite.config / アイコン) は削除しない。
+  (async () => {
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) await reg.unregister();
+        if (regs.length) console.log(`[PWA killswitch] unregistered ${regs.length} service worker(s)`);
+      }
+      if (window.caches && caches.keys) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+        if (keys.length) console.log(`[PWA killswitch] cleared ${keys.length} cache(s)`);
+      }
+    } catch (e) {
+      console.warn("[PWA killswitch]", e);
+    }
+  })();
 }
 
 // Debug globals
@@ -2089,3 +2154,4 @@ window.getPlaneB = () => planeB;
 window.getMaterialA = () => materialA;
 window.getMaterialB = () => materialB;
 window.getApp = () => app;
+window.effectsState = effectsState; // エフェクト検証/ベンチ用
