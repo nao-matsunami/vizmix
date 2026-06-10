@@ -12,26 +12,44 @@ import * as pc from "playcanvas";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** rAF ベースで seconds 秒間 FPS を計測 (1秒ごとサンプル → avg/min) */
-function measureFps(seconds) {
+/**
+ * rAF ベースで FPS を計測 (1秒ごとサンプル → avg/min)。
+ * 各状態の初回コスト(シェーダーコンパイル/動画デコード開始/パイプライン初期化)を
+ * 定常値から分離するため、最初の warmupSec はサンプルを捨てる(in-window 破棄)。
+ * @param {number} measureSec 集計する秒数
+ * @param {number} warmupSec  捨てる先頭秒数 (既定1)
+ */
+function measureFps(measureSec, warmupSec = 1) {
   return new Promise((resolve) => {
     const samples = [];
     let frames = 0;
-    let last = performance.now();
-    const t0 = last;
+    const start = performance.now();
+    let measureStart = null; // ウォームアップ終了 = 計測開始時刻
+    let lastSecond = null;
     function tick(now) {
+      // ウォームアップ中: 計測しない
+      if (measureStart === null) {
+        if (now - start >= warmupSec * 1000) {
+          measureStart = now;
+          lastSecond = now;
+          frames = 0;
+        }
+        requestAnimationFrame(tick);
+        return;
+      }
+      // 計測フェーズ
       frames++;
-      if (now - last >= 1000) {
+      if (now - lastSecond >= 1000) {
         samples.push(frames);
         frames = 0;
-        last = now;
+        lastSecond = now;
       }
-      if (now - t0 < seconds * 1000) {
+      if (now - measureStart < measureSec * 1000) {
         requestAnimationFrame(tick);
       } else {
         const avg = samples.length ? samples.reduce((a, b) => a + b, 0) / samples.length : 0;
         const min = samples.length ? Math.min(...samples) : 0;
-        resolve({ fpsAvg: Math.round(avg * 10) / 10, fpsMin: min, samples });
+        resolve({ fpsAvg: Math.round(avg * 10) / 10, fpsMin: min, samples, warmupSec });
       }
     }
     requestAnimationFrame(tick);
@@ -127,6 +145,7 @@ function downloadJSON(results) {
  */
 export async function runBenchmark(ctx) {
   const dur = ctx.durationSec || 8;
+  const warmup = ctx.warmupSec ?? 1; // 各状態の先頭 warmup 秒は集計から除外
   const results = [];
   renderTable(results, false);
 
@@ -137,7 +156,7 @@ export async function runBenchmark(ctx) {
     for (const eff of EFFECTS) {
       ctx.applyEffect(eff);
       await sleep(900); // 安定待ち
-      const m = await measureFps(dur);
+      const m = await measureFps(dur, warmup);
       results.push({ phase: "effect", material: "video", resolution: res, effect: eff, ...m, ...ctx.getEnvStats() });
       renderTable(results, false);
     }
@@ -149,7 +168,7 @@ export async function runBenchmark(ctx) {
   for (const mat of MATERIALS) {
     await ctx.setMaterial(mat);
     await sleep(900);
-    const m = await measureFps(dur);
+    const m = await measureFps(dur, warmup);
     results.push({ phase: "material", material: mat, resolution: "1920x1080", effect: "all", ...m, ...ctx.getEnvStats() });
     renderTable(results, false);
   }

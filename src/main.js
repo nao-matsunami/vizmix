@@ -1915,10 +1915,12 @@ function maybeStartBenchmark() {
   const q = new URLSearchParams(location.search);
   if (q.get("benchmark") !== "1") return;
   const durationSec = parseInt(q.get("dur") || "8", 10);
-  console.log(`[Benchmark] starting (dur=${durationSec}s)…`);
+  const warmupSec = parseFloat(q.get("warmup") || "1");
+  console.log(`[Benchmark] starting (dur=${durationSec}s, warmup=${warmupSec}s)…`);
   setTimeout(() => {
     runBenchmark({
       durationSec,
+      warmupSec,
       setResolution: async (key) => { applyOutputResolution(key); await new Promise((r) => setTimeout(r, 500)); },
       applyEffect: applyBenchmarkEffect,
       setMaterial: setBenchmarkMaterial,
