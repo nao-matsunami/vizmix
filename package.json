@@ -42,7 +42,8 @@
     },
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "!**/node_modules/canvas/**"
     ],
     "afterPack": "electron/afterPack.cjs",
     "mac": {
