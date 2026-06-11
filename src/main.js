@@ -685,11 +685,13 @@ async function restoreSettings() {
   const bpmInput = document.getElementById("bpmInput");
   if (bpmInput) bpmInput.value = settings.bpm;
 
-  // Restore crossfader
+  // クロスフェーダーは起動時 常に中央(t=0.5・A/B 50%ずつ)で始める。
+  // 保存値の復元はしない（中央始まりなら両チャンネルに素材が入っているか一目で確認できる）。
+  // Reset(設定クリア→リロード)もこの経路を通るため、起動時とReset時が同じ中央で揃う。
   const crossfader = document.getElementById("crossfader");
   if (crossfader) {
-    crossfader.value = settings.crossfade;
-    const value = settings.crossfade / 100;
+    crossfader.value = 50;
+    const value = 0.5;
     setCrossfade(value);
     updatePreviewBorders(value);
     currentCrossfadeValue = value;
