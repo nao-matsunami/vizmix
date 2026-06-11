@@ -7,12 +7,6 @@
 import * as pc from "playcanvas";
 import { ShaderSource } from "./shaderRenderer.js";
 
-// BUG-1: Electron同梱Chromiumはwebカメラ映像を上下逆に届ける（ブラウザ版は正常）。
-// Electron実行時のみ webカメラテクスチャを flipY 補正する。ブラウザ版は false で不変。
-// OS判定ではなく Electron 実行判定で行う（contextIsolation:true のため window.process は
-// 使えないので userAgent で判定）。
-const IS_ELECTRON = typeof navigator !== "undefined" && /electron/i.test(navigator.userAgent);
-
 // チャンネル別のバンク管理
 // Channel A: サンプル動画 001-008
 // Channel B: サンプル動画 009-016
@@ -366,10 +360,9 @@ class VideoChannel {
       const videoWidth = this.video.videoWidth;
       const videoHeight = this.video.videoHeight;
 
-      // 動画素材は flipY=false。サイズ違い、または webカメラ用 flipY=true テクスチャを
-      // 流用している場合は作り直す。BUG-2: 新フレーム準備完了後にここで初めて差し替わる。
+      // BUG-2: 新フレーム準備完了後にここで初めて差し替わる。サイズ違いは作り直す。
       if (!this.videoTexture || this.videoTexture.width !== videoWidth ||
-          this.videoTexture.height !== videoHeight || this.videoTexture.flipY !== false) {
+          this.videoTexture.height !== videoHeight) {
         console.log(`[${this.name}] Recreating texture: ${videoWidth}x${videoHeight}`);
         const old = this.videoTexture;
         this.videoTexture = new pc.Texture(this.device, {
@@ -378,7 +371,6 @@ class VideoChannel {
           height: videoHeight,
           format: pc.PIXELFORMAT_RGBA8,
           mipmaps: false,
-          flipY: false,
           minFilter: pc.FILTER_LINEAR,
           magFilter: pc.FILTER_LINEAR,
           addressU: pc.ADDRESS_CLAMP_TO_EDGE,
@@ -559,10 +551,9 @@ export class VideoManager {
       return;
     }
 
-    // Reuse or create video texture。BUG-1: webカメラは Electron実行時のみ flipY 補正。
-    // 動画用 flipY=false テクスチャを流用している場合も作り直す（flipY不一致で再生成）。
+    // Reuse or create video texture。カメラ・動画とも同一経路（flipY 補正なし）。
     if (!vc.videoTexture || vc.videoTexture.width !== webcamVideo.videoWidth ||
-        vc.videoTexture.height !== webcamVideo.videoHeight || vc.videoTexture.flipY !== IS_ELECTRON) {
+        vc.videoTexture.height !== webcamVideo.videoHeight) {
       const old = vc.videoTexture;
       vc.videoTexture = new pc.Texture(vc.device, {
         name: `webcamTexture-${channel}`,
@@ -570,7 +561,6 @@ export class VideoManager {
         height: webcamVideo.videoHeight || 720,
         format: pc.PIXELFORMAT_RGBA8,
         mipmaps: false,
-        flipY: IS_ELECTRON,
         minFilter: pc.FILTER_LINEAR,
         magFilter: pc.FILTER_LINEAR,
         addressU: pc.ADDRESS_CLAMP_TO_EDGE,
