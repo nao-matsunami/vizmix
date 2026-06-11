@@ -685,11 +685,13 @@ async function restoreSettings() {
   const bpmInput = document.getElementById("bpmInput");
   if (bpmInput) bpmInput.value = settings.bpm;
 
-  // Restore crossfader
+  // クロスフェーダーは起動時 常に中央(t=0.5・A/B 50%ずつ)で始める。
+  // 保存値の復元はしない（中央始まりなら両チャンネルに素材が入っているか一目で確認できる）。
+  // Reset(設定クリア→リロード)もこの経路を通るため、起動時とReset時が同じ中央で揃う。
   const crossfader = document.getElementById("crossfader");
   if (crossfader) {
-    crossfader.value = settings.crossfade;
-    const value = settings.crossfade / 100;
+    crossfader.value = 50;
+    const value = 0.5;
     setCrossfade(value);
     updatePreviewBorders(value);
     currentCrossfadeValue = value;
@@ -1576,13 +1578,16 @@ function createVideoPlane(name, zPosition) {
   return { entity: plane, material: material };
 }
 
-// 出力プレーンを出力カメラのビューに全画面フィット (final FBO は canvas と同アスペクト)
+// 出力プレーンを出力カメラのビューに全画面フィット (final FBO は canvas と同アスペクト)。
+// final FBO は RenderTarget テクスチャで、video テクスチャ(planeA/B が -h で描く)とは
+// V の向きが逆になる。出力プレーンは +h（Z スケール正）でサンプルし、masterFBO 経路で
+// 1回入る Y 反転を打ち消す（全素材・全環境一律で正立。環境分岐なし）。
 function updateOutputPlaneSize() {
   if (!outputPlane || !outputCamera) return;
   const aspect = outputCamera.camera.aspectRatio;
   const h = outputCamera.camera.orthoHeight * 2;
   const w = h * aspect;
-  outputPlane.setLocalScale(w, 1, -h);
+  outputPlane.setLocalScale(w, 1, h);
 }
 
 function updatePlaneSize() {
@@ -1681,6 +1686,15 @@ async function initPlayCanvas() {
   planeB = resultB.entity;
   materialA = resultA.material;
   materialB = resultB.material;
+
+  // クロスフェードのブレンド: 2枚を BLEND_NORMAL で重ねると上の B が下の A を
+  // (1-opB) で余分に減衰させ A=(1-t)^2 の非対称になる。加算ブレンドにすると
+  // masterFBO = A*opA + B*opB = (1-t)*A + t*B の線形・対称ミックスになり、
+  // レターボックス(黒)も黒のまま保たれる。opacity 式(opA=(1-t)*dimmerA 等)は不変。
+  materialA.blendType = pc.BLEND_ADDITIVEALPHA;
+  materialB.blendType = pc.BLEND_ADDITIVEALPHA;
+  materialA.update();
+  materialB.update();
 
   app.root.addChild(planeA);
   app.root.addChild(planeB);
@@ -1845,11 +1859,19 @@ async function initPlayCanvas() {
     }
   });
 
-  // シーン描画後: Master FBO に ISF エフェクトチェーンを適用して canvas へ出力。
-  app.on("postrender", function () {
+  // 1フレーム遅延の解消: シーンカメラ(priority0)が World(planeA/B)を masterFBO に
+  // 描き終えた直後に ISF エフェクトチェーンを適用して final FBO を更新する。
+  // この後に出力カメラ(priority1)が final FBO を表示するため、同一フレームの結果が
+  // 出る（旧: app.on('postrender') は全カメラ描画後で、出力カメラが前フレームの
+  // final FBO を表示していた = L1遅延）。
+  // planeA/B は BLEND_NORMAL = transparent パスで描かれる。シーンカメラが World の
+  // transparent パスを描き終えた直後（= masterFBO 完成・出力カメラ描画の前）に1回だけ適用。
+  app.scene.on("postrender:layer", function (cam, layer, transparent) {
     if (!masterEffect) return;
-    const chain = benchmarkOverrideChain || buildActiveChain(getEffectParams());
-    masterEffect.apply(chain, performance.now() / 1000);
+    if (cam === camera.camera && layer === worldLayer && transparent) {
+      const chain = benchmarkOverrideChain || buildActiveChain(getEffectParams());
+      masterEffect.apply(chain, performance.now() / 1000);
+    }
   });
 
   app.start();

@@ -243,9 +243,10 @@ class VideoChannel {
 
     console.log(`[${this.name}] Loading video ${index + 1} (${src})`);
 
-    // Clear texture during loading to prevent stale content
-    this.texture = null;
-
+    // BUG-2: this.texture は null にしない（準備完了まで前の素材を表示し続ける）。
+    // テクスチャの再生成/破棄は update() が新フレーム準備完了(HAVE_CURRENT_DATA)を
+    // 待ってから行う。ここで早期に破棄/null化すると、プレビュー(ライブvideo)に対し
+    // マスターが黒画面/破棄テクスチャ参照になり切替の瞬間に大きな誤差が出る。
     this.video.src = src;
 
     await new Promise((resolve, reject) => {
@@ -256,30 +257,9 @@ class VideoChannel {
       };
     });
 
-    // Always check dimensions and recreate texture if needed
-    const w = this.video.videoWidth;
-    const h = this.video.videoHeight;
-    if (!this.videoTexture || this.videoTexture.width !== w || this.videoTexture.height !== h) {
-      console.log(`[${this.name}] Creating texture: ${w}x${h}${w > 1920 || h > 1080 ? ' (4K)' : ''}`);
-      if (this.videoTexture) {
-        this.videoTexture.destroy();
-      }
-      this.videoTexture = new pc.Texture(this.device, {
-        name: `videoTexture-${this.name}`,
-        width: w,
-        height: h,
-        format: pc.PIXELFORMAT_RGBA8,
-        mipmaps: false,
-        minFilter: pc.FILTER_LINEAR,
-        magFilter: pc.FILTER_LINEAR,
-        addressU: pc.ADDRESS_CLAMP_TO_EDGE,
-        addressV: pc.ADDRESS_CLAMP_TO_EDGE,
-      });
-    }
-
     try {
       await this.video.play();
-      console.log(`[${this.name}] Playing video ${index + 1} (${w}x${h})`);
+      console.log(`[${this.name}] Playing video ${index + 1} (${this.video.videoWidth}x${this.video.videoHeight})`);
     } catch (e) {
       console.warn(`[${this.name}] Autoplay blocked`);
     }
@@ -348,8 +328,8 @@ class VideoChannel {
       this.currentIndex = index;
       this.shaderSource = null;
       this.currentShaderVersion = -1;
-      // Clear texture to signal loading state (prevents stale content)
-      this.texture = null;
+      // BUG-2: this.texture は null にしない。新ソースの準備完了まで前の素材を表示し、
+      // update() が HAVE_CURRENT_DATA を待って新テクスチャへ差し替える。
 
       this.loadVideo(index).catch(console.error);
       console.log(`[${this.name}] Switched to video ${index + 1}`);
@@ -380,8 +360,11 @@ class VideoChannel {
       const videoWidth = this.video.videoWidth;
       const videoHeight = this.video.videoHeight;
 
-      if (!this.videoTexture || this.videoTexture.width !== videoWidth || this.videoTexture.height !== videoHeight) {
+      // BUG-2: 新フレーム準備完了後にここで初めて差し替わる。サイズ違いは作り直す。
+      if (!this.videoTexture || this.videoTexture.width !== videoWidth ||
+          this.videoTexture.height !== videoHeight) {
         console.log(`[${this.name}] Recreating texture: ${videoWidth}x${videoHeight}`);
+        const old = this.videoTexture;
         this.videoTexture = new pc.Texture(this.device, {
           name: `videoTexture-${this.name}`,
           width: videoWidth,
@@ -393,6 +376,7 @@ class VideoChannel {
           addressU: pc.ADDRESS_CLAMP_TO_EDGE,
           addressV: pc.ADDRESS_CLAMP_TO_EDGE,
         });
+        if (old) old.destroy(); // 旧テクスチャ解放 (この後 this.texture を新へ差し替え)
       }
 
       this.videoTexture.setSource(this.video);
@@ -567,8 +551,10 @@ export class VideoManager {
       return;
     }
 
-    // Reuse or create video texture
-    if (!vc.videoTexture || vc.videoTexture.width !== webcamVideo.videoWidth || vc.videoTexture.height !== webcamVideo.videoHeight) {
+    // Reuse or create video texture。カメラ・動画とも同一経路（flipY 補正なし）。
+    if (!vc.videoTexture || vc.videoTexture.width !== webcamVideo.videoWidth ||
+        vc.videoTexture.height !== webcamVideo.videoHeight) {
+      const old = vc.videoTexture;
       vc.videoTexture = new pc.Texture(vc.device, {
         name: `webcamTexture-${channel}`,
         width: webcamVideo.videoWidth || 1280,
@@ -580,6 +566,7 @@ export class VideoManager {
         addressU: pc.ADDRESS_CLAMP_TO_EDGE,
         addressV: pc.ADDRESS_CLAMP_TO_EDGE,
       });
+      if (old) old.destroy();
     }
 
     vc.videoTexture.setSource(webcamVideo);
