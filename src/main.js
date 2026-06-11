@@ -1685,6 +1685,15 @@ async function initPlayCanvas() {
   materialA = resultA.material;
   materialB = resultB.material;
 
+  // クロスフェードのブレンド: 2枚を BLEND_NORMAL で重ねると上の B が下の A を
+  // (1-opB) で余分に減衰させ A=(1-t)^2 の非対称になる。加算ブレンドにすると
+  // masterFBO = A*opA + B*opB = (1-t)*A + t*B の線形・対称ミックスになり、
+  // レターボックス(黒)も黒のまま保たれる。opacity 式(opA=(1-t)*dimmerA 等)は不変。
+  materialA.blendType = pc.BLEND_ADDITIVEALPHA;
+  materialB.blendType = pc.BLEND_ADDITIVEALPHA;
+  materialA.update();
+  materialB.update();
+
   app.root.addChild(planeA);
   app.root.addChild(planeB);
 
