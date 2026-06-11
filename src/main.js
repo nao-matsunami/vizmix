@@ -1848,11 +1848,19 @@ async function initPlayCanvas() {
     }
   });
 
-  // シーン描画後: Master FBO に ISF エフェクトチェーンを適用して canvas へ出力。
-  app.on("postrender", function () {
+  // 1フレーム遅延の解消: シーンカメラ(priority0)が World(planeA/B)を masterFBO に
+  // 描き終えた直後に ISF エフェクトチェーンを適用して final FBO を更新する。
+  // この後に出力カメラ(priority1)が final FBO を表示するため、同一フレームの結果が
+  // 出る（旧: app.on('postrender') は全カメラ描画後で、出力カメラが前フレームの
+  // final FBO を表示していた = L1遅延）。
+  // planeA/B は BLEND_NORMAL = transparent パスで描かれる。シーンカメラが World の
+  // transparent パスを描き終えた直後（= masterFBO 完成・出力カメラ描画の前）に1回だけ適用。
+  app.scene.on("postrender:layer", function (cam, layer, transparent) {
     if (!masterEffect) return;
-    const chain = benchmarkOverrideChain || buildActiveChain(getEffectParams());
-    masterEffect.apply(chain, performance.now() / 1000);
+    if (cam === camera.camera && layer === worldLayer && transparent) {
+      const chain = benchmarkOverrideChain || buildActiveChain(getEffectParams());
+      masterEffect.apply(chain, performance.now() / 1000);
+    }
   });
 
   app.start();
