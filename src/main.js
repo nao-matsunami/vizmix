@@ -1576,13 +1576,16 @@ function createVideoPlane(name, zPosition) {
   return { entity: plane, material: material };
 }
 
-// 出力プレーンを出力カメラのビューに全画面フィット (final FBO は canvas と同アスペクト)
+// 出力プレーンを出力カメラのビューに全画面フィット (final FBO は canvas と同アスペクト)。
+// final FBO は RenderTarget テクスチャで、video テクスチャ(planeA/B が -h で描く)とは
+// V の向きが逆になる。出力プレーンは +h（Z スケール正）でサンプルし、masterFBO 経路で
+// 1回入る Y 反転を打ち消す（全素材・全環境一律で正立。環境分岐なし）。
 function updateOutputPlaneSize() {
   if (!outputPlane || !outputCamera) return;
   const aspect = outputCamera.camera.aspectRatio;
   const h = outputCamera.camera.orthoHeight * 2;
   const w = h * aspect;
-  outputPlane.setLocalScale(w, 1, -h);
+  outputPlane.setLocalScale(w, 1, h);
 }
 
 function updatePlaneSize() {
