@@ -1,7 +1,11 @@
 /**
  * VizMix - Keyboard Manager
- * v0.7.0
+ *
+ * エフェクトのショートカットは effectRegistry の shortcut から生成する
+ * （手書きしない。旧実装では F1〜F6 しか登録されておらず F7 以降が死んでいた）。
  */
+
+import { SHORTCUT_TO_EFFECT } from "./effectRegistry.js";
 
 const KEY_MAP = {
   'Digit1': { action: 'bankA', value: 0 },
@@ -38,13 +42,13 @@ const KEY_MAP = {
   'KeyO': { action: 'openOutput' },
   'KeyH': { action: 'showHelp' },
 
-  'F1': { action: 'fxInvert' },
-  'F2': { action: 'fxGrayscale' },
-  'F3': { action: 'fxSepia' },
-  'F4': { action: 'fxBlurReset' },
-  'F5': { action: 'fxBrightnessReset' },
-  'F6': { action: 'fxContrastReset' },
 };
+
+// エフェクトのショートカットをレジストリから流し込む。
+// 単一アクション 'effectShortcut' に寄せ、キー名をそのまま渡す。
+for (const key of Object.keys(SHORTCUT_TO_EFFECT)) {
+  KEY_MAP[key] = { action: 'effectShortcut', value: key };
+}
 
 const SHIFT_KEY_MAP = {
   'ArrowUp': { action: 'bpmAdjust', value: 5 },

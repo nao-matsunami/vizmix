@@ -1626,63 +1626,10 @@
       <div id="fx-panel-content">
         <div class="effects-panel">
           <div class="effects-content" id="effectsContent">
-            <div class="effects-list">
-              <!-- Color Category -->
-              <div class="effect-category">Color</div>
-              <div class="effect-item" data-effect="invert">
-                <span class="effect-indicator"></span>
-                <span class="effect-name">Invert</span>
-                <span class="effect-shortcut">F1</span>
-              </div>
-              <div class="effect-item" data-effect="grayscale">
-                <span class="effect-indicator"></span>
-                <span class="effect-name">Grayscale</span>
-                <span class="effect-shortcut">F2</span>
-              </div>
-              <div class="effect-item" data-effect="sepia">
-                <span class="effect-indicator"></span>
-                <span class="effect-name">Sepia</span>
-                <span class="effect-shortcut">F3</span>
-              </div>
-
-              <!-- Adjust Category -->
-              <div class="effect-category">Adjust</div>
-              <div class="effect-item" data-effect="brightness">
-                <span class="effect-indicator"></span>
-                <span class="effect-name">Brightness</span>
-                <span class="effect-shortcut">F5</span>
-              </div>
-              <div class="effect-item" data-effect="contrast">
-                <span class="effect-indicator"></span>
-                <span class="effect-name">Contrast</span>
-                <span class="effect-shortcut">F6</span>
-              </div>
-
-              <!-- Blur Category -->
-              <div class="effect-category">Blur</div>
-              <div class="effect-item" data-effect="blur">
-                <span class="effect-indicator"></span>
-                <span class="effect-name">Blur</span>
-                <span class="effect-shortcut">F4</span>
-              </div>
-
-              <!-- Glitch Category -->
-              <div class="effect-category">Glitch</div>
-              <div class="effect-item" data-effect="glitch">
-                <span class="effect-indicator"></span>
-                <span class="effect-name">Glitch</span>
-                <span class="effect-shortcut">F7</span>
-              </div>
-              <div class="effect-item" data-effect="rgbShift">
-                <span class="effect-indicator"></span>
-                <span class="effect-name">RGB Shift</span>
-                <span class="effect-shortcut">F8</span>
-              </div>
-              <div class="effect-item" data-effect="rgbMultiply">
-                <span class="effect-indicator"></span>
-                <span class="effect-name">RGB Multiply</span>
-                <span class="effect-shortcut">F9</span>
-              </div>
+            <!-- エフェクト一覧は src/effectRegistry.js から生成する。
+                 ここに項目を手書きしないこと（追記漏れで死蔵する事故を防ぐため）。
+                 生成は src/effectsUI.js の buildEffectsList()。 -->
+            <div class="effects-list" id="effectsList"></div>
             </div>
 
             <!-- Parameter Panel -->
