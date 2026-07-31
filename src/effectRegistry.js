@@ -54,9 +54,55 @@ export const EFFECT_REGISTRY = [
   { id: "invert", label: "Invert", category: "Color", shortcut: "F1",
     type: "toggle", uiRank: 0, isf: S.INVERT },
 
+  // ── 量子化系（Blur より前に潰す）──
+  { id: "posterize", label: "Posterize", category: "Noise",
+    type: "continuous", uiRank: 0, isf: S.POSTERIZE,
+    ui: { levels: { label: "Levels", factor: 1, unit: "" } } },
+
+  { id: "bitcrush", label: "Bitcrush", category: "Destroy",
+    type: "continuous", uiRank: 3, isf: S.BITCRUSH,
+    ui: { levels: { label: "Levels", factor: 1, unit: "" },
+          dither: { label: "Dither" } } },
+
   { id: "blur", label: "Blur", category: "Blur", shortcut: "F4",
     type: "continuous", uiRank: 0, isf: S.BLUR,
     ui: { amount: { label: "Radius" } } },
+
+  // ── WARP（歪ませてから壊す）──
+  { id: "wave", label: "Wave", category: "Warp",
+    type: "continuous", uiRank: 0, isf: S.WAVE,
+    ui: { frequency: { label: "Frequency", factor: 1, unit: "" },
+          speed: { label: "Speed", factor: 1, unit: "" } } },
+
+  { id: "kaleidoscope", label: "Kaleidoscope", category: "Warp",
+    type: "continuous", uiRank: 1, isf: S.KALEIDOSCOPE,
+    ui: { segments: { label: "Segments", factor: 1, unit: "" },
+          rotation: { label: "Rotation", factor: 1, unit: "\u00B0" } } },
+
+  { id: "mosaic", label: "Mosaic", category: "Warp",
+    type: "continuous", uiRank: 2, isf: S.MOSAIC,
+    ui: { cellSize: { label: "Cell", factor: 1, unit: "px" },
+          dots: { label: "Dots" } } },
+
+  // ── DESTROY（デジタル破壊系）──
+  { id: "sliceShift", label: "Slice Shift", category: "Destroy",
+    type: "continuous", uiRank: 0, isf: S.SLICE_SHIFT,
+    ui: { sliceCount: { label: "Slices", factor: 1, unit: "" },
+          maxShift: { label: "Max Shift" } } },
+
+  { id: "blockGlitch", label: "Block Glitch", category: "Destroy",
+    type: "continuous", uiRank: 1, isf: S.BLOCK_GLITCH,
+    ui: { blockSize: { label: "Block", factor: 1, unit: "px" } } },
+
+  { id: "chromatic", label: "Chromatic Ab.", category: "Destroy",
+    type: "continuous", uiRank: 2, isf: S.CHROMATIC,
+    ui: { falloff: { label: "Falloff", factor: 1, unit: "" } } },
+
+  { id: "pixelSort", label: "Pixel Sort", category: "Destroy",
+    type: "continuous", uiRank: 4, isf: S.PIXEL_SORT,
+    ui: { threshold: { label: "Threshold" },
+          reach: { label: "Reach", factor: 1, unit: "px" } } },
+
 
   { id: "rgbShift", label: "RGB Shift", category: "Glitch", shortcut: "F8",
     type: "continuous", uiRank: 1, isf: S.RGB_SHIFT },
@@ -67,10 +113,25 @@ export const EFFECT_REGISTRY = [
   { id: "rgbMultiply", label: "RGB Multiply", category: "Glitch", shortcut: "F9",
     type: "continuous", uiRank: 2, isf: S.RGB_MULTIPLY,
     ui: { tint: { label: "Color", stateKey: "color" } } },
+
+  // ── 画面系 / 粒子（最後に全体へ重ねる）──
+  { id: "scanlines", label: "Scan Lines", category: "Noise",
+    type: "continuous", uiRank: 1, isf: S.SCANLINES,
+    ui: { lineFreq: { label: "Line Freq", factor: 1, unit: "" },
+          rollSpeed: { label: "Roll", factor: 1, unit: "" } } },
+
+  { id: "crt", label: "CRT", category: "Destroy",
+    type: "continuous", uiRank: 5, isf: S.CRT,
+    ui: { curvature: { label: "Curvature" },
+          scanIntensity: { label: "Scanline" } } },
+
+  { id: "noise", label: "Noise", category: "Noise",
+    type: "continuous", uiRank: 2, isf: S.NOISE,
+    ui: { mono: { label: "Mono", factor: 1, unit: "" } } },
 ];
 
 /** 一覧UIのカテゴリ表示順 */
-export const CATEGORY_ORDER = ["Color", "Adjust", "Blur", "Glitch"];
+export const CATEGORY_ORDER = ["Color", "Adjust", "Blur", "Warp", "Destroy", "Glitch", "Noise"];
 
 // ── ISFヘッダからのパラメータ導出 ──────────────────────────────────────────────
 

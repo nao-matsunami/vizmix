@@ -109,7 +109,7 @@ MIDI ハンドラ・MIDI learn ターゲット・シリアライズが**全部�
 |---|---|---|
 | `id` | ✅ | 内部キー。状態・チェーン・`data-effect` 属性に使う |
 | `label` | ✅ | UI 表示名 |
-| `category` | ✅ | 一覧の見出し。`CATEGORY_ORDER` に無い名前も末尾に出る |
+| `category` | ✅ | 一覧の見出し。既定の並びは `Color` / `Adjust` / `Blur` / `Warp` / `Destroy` / `Glitch` / `Noise`（`CATEGORY_ORDER`）。無い名前も末尾に出る |
 | `shortcut` | | F系キー。toggle は ON/OFF、continuous は既定値へリセット |
 | `type` | ✅ | `toggle` / `toggle-amount` / `continuous`（下表） |
 | `uiRank` | | 同カテゴリ内の表示順（既定 0）。**適用順とは別** |
@@ -152,3 +152,18 @@ planeA/planeB 合成 → [masterFBO] → ISF チェーン(ping/pong) → [final 
 
 エフェクトは canvas の画素に焼き込まれるため、`captureStream` 経由の出力にもそのまま乗る
 （出力側で CSS フィルタを再適用する必要はない）。
+
+## 7. 現在のカテゴリ構成
+
+| カテゴリ | 性格 | 収録 |
+|---|---|---|
+| Color / Adjust | 土台の色調整 | Invert, Grayscale, Sepia, Saturate, Hue Rotate, Brightness, Contrast |
+| Blur | ぼかし | Blur |
+| Warp | 有機的な歪み | Wave, Kaleidoscope, Mosaic |
+| Destroy | デジタル破壊 | Slice Shift, Block Glitch, Chromatic Ab., Bitcrush, Pixel Sort, CRT |
+| Glitch | 既存グリッチ | Glitch, RGB Shift, RGB Multiply |
+| Noise | 画面 / 粒子 | Posterize, Scan Lines, Noise |
+
+適用順は「色調整 → 量子化 → ブラー → Warp → Destroy → Glitch → 画面/粒子」。
+画面系(Scan Lines / CRT)と粒子(Noise)を最後に置くのは、それらが「映像を見せる装置」の
+表現で、前段の加工全体に乗るべきだから。
