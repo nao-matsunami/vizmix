@@ -250,12 +250,20 @@ export const SHORTCUT_TO_EFFECT = Object.fromEntries(
 
 // ── 状態 ──────────────────────────────────────────────────────────────────────
 
-/** レジストリから初期状態を作る */
+/**
+ * レジストリから初期状態を作る。
+ *
+ * enabled は **全エフェクトが持ち、初期は false**。
+ * 「効いている」= enabled かつ 代表パラメータが既定値から動いている、で統一する
+ * (toggle だけは量を持たないので enabled のみ)。
+ * 値を設定する経路 (setEffectParam) が enabled を立てるので、スライダーを
+ * 動かせば自然に ON になり、ダブルクリックで OFF にしても値は残る。
+ */
 export function createEffectsState() {
   const state = {};
   for (const e of EFFECTS) {
     const s = {};
-    if (e.type === "toggle" || e.type === "toggle-amount") s.enabled = false;
+    s.enabled = false;
     if (e.type !== "toggle") {
       for (const p of e.params) s[p.stateKey] = p.default;
     }
@@ -271,7 +279,8 @@ export function isEffectActive(effect, st) {
   if (!effect.gate) return effect.type === "toggle-amount" ? !!st.enabled : false;
   const ui = st[effect.gate.stateKey];
   const moved = ui !== undefined && ui !== effect.gate.default;
-  return effect.type === "toggle-amount" ? !!st.enabled && moved : moved;
+  // toggle-amount / continuous とも「入っていて、かつ量が動いている」
+  return !!st.enabled && moved;
 }
 
 /**

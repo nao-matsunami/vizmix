@@ -82,13 +82,10 @@ export function initEffectsUI(effectsState, onEffectChange) {
       if (effectKey) selectEffect(effectKey);
     });
 
-    // ダブルクリックでトグル
+    // ダブルクリックで ON/OFF（マニュアル記載の仕様。型を問わず全エフェクト）
     item.addEventListener("dblclick", () => {
       const effectKey = item.dataset.effect;
-      const def = EFFECT_BY_ID[effectKey];
-      if (def && (def.type === "toggle" || def.type === "toggle-amount")) {
-        toggleEffect(effectKey);
-      }
+      if (EFFECT_BY_ID[effectKey]) toggleEffect(effectKey);
     });
   });
 
@@ -164,7 +161,6 @@ function selectEffect(effectKey) {
 function toggleEffect(effectKey) {
   const def = EFFECT_BY_ID[effectKey];
   if (!def) return;
-  if (def.type !== "toggle" && def.type !== "toggle-amount") return;
   const current = currentEffectsState[effectKey]?.enabled ?? false;
   updateEffect(effectKey, "enabled", !current);
 }
@@ -201,7 +197,7 @@ function showEffectParams(effectKey) {
     </div>
   `;
 
-  if (def.type === "toggle" || def.type === "toggle-amount") {
+  {
     const isEnabled = state.enabled ?? false;
     html += `
       <div class="param-row">

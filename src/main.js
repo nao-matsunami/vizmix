@@ -1865,26 +1865,30 @@ async function initPlayCanvas() {
 // ── 自動ベンチマーク (?benchmark=1) ───────────────────────────────────────────
 function applyBenchmarkEffect(name) {
   resetAllEffects();
+  // state を直接書くと enabled が立たず効かないので、必ず setter を通す。
+  const set = (id, key, v) => setEffectParam(id, key, v);
+  const on = (id) => toggleEffectEnabled(id);
   switch (name) {
     case "none": break;
-    case "brightness": effectsState.brightness.amount = 60; break;
-    case "contrast": effectsState.contrast.amount = 50; break;
-    case "saturate": effectsState.saturate.amount = 180; break;
-    case "hueRotate": effectsState.hueRotate.amount = 120; break;
-    case "grayscale": effectsState.grayscale.enabled = true; effectsState.grayscale.amount = 100; break;
-    case "sepia": effectsState.sepia.enabled = true; effectsState.sepia.amount = 100; break;
-    case "invert": effectsState.invert.enabled = true; break;
-    case "blur": effectsState.blur.amount = 50; break;
-    case "rgbShift": effectsState.rgbShift.amount = 60; break;
-    case "glitch": effectsState.glitch.amount = 50; break;
-    case "rgbMultiply": effectsState.rgbMultiply.amount = 70; break;
+    case "brightness": set("brightness", "amount", 60); break;
+    case "contrast": set("contrast", "amount", 50); break;
+    case "saturate": set("saturate", "amount", 180); break;
+    case "hueRotate": set("hueRotate", "amount", 120); break;
+    case "grayscale": on("grayscale"); set("grayscale", "amount", 100); break;
+    case "sepia": on("sepia"); set("sepia", "amount", 100); break;
+    case "invert": on("invert"); break;
+    case "blur": set("blur", "amount", 50); break;
+    case "rgbShift": set("rgbShift", "amount", 60); break;
+    case "glitch": set("glitch", "amount", 50); break;
+    case "rgbMultiply": set("rgbMultiply", "amount", 70); break;
     case "all":
-      effectsState.brightness.amount = 30; effectsState.contrast.amount = 30;
-      effectsState.saturate.amount = 160; effectsState.hueRotate.amount = 60;
-      effectsState.blur.amount = 40; effectsState.rgbShift.amount = 50;
-      effectsState.glitch.amount = 40; break;
+      set("brightness", "amount", 30); set("contrast", "amount", 30);
+      set("saturate", "amount", 160); set("hueRotate", "amount", 60);
+      set("blur", "amount", 40); set("rgbShift", "amount", 50);
+      set("glitch", "amount", 40); break;
   }
 }
+
 
 async function setBenchmarkMaterial(type) {
   // チャンネルA のみを評価対象にする

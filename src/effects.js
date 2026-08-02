@@ -37,11 +37,21 @@ export function setEffectParam(effectId, key, value) {
   const st = effectsState[effectId];
   if (key === "enabled") {
     st.enabled = !!value;
+    // ON にしたとき量が既定値のまま（＝何も起きない）なら全開にする。
+    // UI のダブルクリック / パネルのトグル / toggleEffectEnabled() /
+    // MIDI が全部ここを通るので、経路によって挙動が食い違わない。
+    if (st.enabled && effect.gate && effect.type !== "toggle") {
+      const g = effect.gate;
+      if (st[g.stateKey] === g.default) st[g.stateKey] = g.max;
+    }
     return st.enabled;
   }
   const param = paramOf(effect, key);
   if (!param) return undefined;
   st[key] = clampParam(param, value);
+  // 値を動かしたら ON にする。OFF のままドラッグしても何も起きない、を避ける。
+  // (toggle-amount は従来どおり enabled を明示操作する仕様なので対象外)
+  if (effect.type === "continuous") st.enabled = true;
   return st[key];
 }
 
@@ -50,23 +60,24 @@ export function setEffectParam(effectId, key, value) {
  * toggle-amount で「量が既定値のまま」なら全開にする（従来の
  * toggleGrayscale / toggleSepia が amount 0 → 100 にしていた挙動）。
  */
+/**
+ * ON/OFF を反転する（全23本共通。マニュアル記載の「ダブルクリックで ON/OFF切替」）。
+ *
+ * OFF にしても値は保持する → 再び ON にすると同じ効き具合で戻る。
+ * ON にしたとき量が既定値のまま（=何も起きない）なら全開にする。
+ * これは従来 Grayscale / Sepia が 0 → 100 にしていた挙動を全型へ広げたもの。
+ */
 export function toggleEffectEnabled(effectId) {
   const effect = EFFECT_BY_ID[effectId];
   if (!effect) return false;
-  const st = effectsState[effectId];
-  st.enabled = !st.enabled;
-  if (st.enabled && effect.type === "toggle-amount" && effect.gate) {
-    const g = effect.gate;
-    if (st[g.stateKey] === g.default) st[g.stateKey] = g.max;
-  }
-  return st.enabled;
+  return setEffectParam(effectId, "enabled", !effectsState[effectId].enabled);
 }
 
 export function resetEffect(effectId) {
   const effect = EFFECT_BY_ID[effectId];
   if (!effect) return;
   const st = effectsState[effectId];
-  if (effect.type === "toggle" || effect.type === "toggle-amount") st.enabled = false;
+  st.enabled = false;
   if (effect.type !== "toggle") {
     for (const p of effect.params) st[p.stateKey] = p.default;
   }
@@ -105,8 +116,13 @@ export function deserializeEffectsState(data) {
     const incoming = data[e.id];
     if (!incoming || typeof incoming !== "object") continue;
     const st = effectsState[e.id];
-    if (incoming.enabled !== undefined && (e.type === "toggle" || e.type === "toggle-amount")) {
+    if (incoming.enabled !== undefined) {
       st.enabled = !!incoming.enabled;
+    } else if (e.type === "continuous" && e.gate) {
+      // enabled を持たない旧ペイロード: 量が既定値から動いていれば ON とみなす
+      // (旧仕様は「量が中立でなければ効く」だったので、それを再現する)
+      const v = incoming[e.gate.stateKey];
+      st.enabled = v !== undefined && v !== e.gate.default;
     }
     for (const p of e.params) {
       if (incoming[p.stateKey] === undefined) continue;
