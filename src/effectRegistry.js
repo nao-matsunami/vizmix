@@ -77,7 +77,8 @@ export const EFFECT_REGISTRY = [
   { id: "kaleidoscope", label: "Kaleidoscope", category: "Warp",
     type: "continuous", uiRank: 1, isf: S.KALEIDOSCOPE,
     ui: { segments: { label: "Segments", factor: 1, unit: "" },
-          rotation: { label: "Rotation", factor: 1, unit: "\u00B0" } } },
+          rotation: { label: "Rotation", factor: 1, unit: "\u00B0" },
+          zoom: { label: "Zoom", factor: 1, unit: "x" } } },
 
   { id: "mosaic", label: "Mosaic", category: "Warp",
     type: "continuous", uiRank: 2, isf: S.MOSAIC,

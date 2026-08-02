@@ -401,22 +401,32 @@ const KALEIDOSCOPE = `/*{
   "INPUTS": [ {"NAME":"inputImage","TYPE":"image"},
               {"NAME":"amount","TYPE":"float","DEFAULT":0.0,"MIN":0.0,"MAX":1.0},
               {"NAME":"segments","TYPE":"float","DEFAULT":6.0,"MIN":2.0,"MAX":24.0},
-              {"NAME":"rotation","TYPE":"float","DEFAULT":0.0,"MIN":0.0,"MAX":360.0} ]
+              {"NAME":"rotation","TYPE":"float","DEFAULT":0.0,"MIN":0.0,"MAX":360.0},
+              {"NAME":"zoom","TYPE":"float","DEFAULT":1.0,"MIN":0.2,"MAX":3.0} ]
 }*/
+// 0..1 の外へ出た座標を鏡像で折り返す。
+// clamp で潰すと画像の縁の色が扇状に伸びて「黒い星」になり、万華鏡に見えない。
+float mirror1(float x) {
+  x = mod(abs(x), 2.0);
+  return x > 1.0 ? 2.0 - x : x;
+}
 void main() {
   vec2 uv = isf_FragNormCoord;
   vec4 base = IMG_THIS_PIXEL(inputImage);
   if (amount <= 0.0) { gl_FragColor = base; return; }
   float aspect = RENDERSIZE.x / RENDERSIZE.y;
-  vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
-  float r = length(p);
-  float ang = atan(p.y, p.x) + radians(rotation);
+  vec2 p = uv - 0.5;
+  p.x *= aspect;
+  float r = length(p) * max(0.2, zoom);
+  float a = atan(p.y, p.x) + radians(rotation);
   float seg = 6.28318530718 / max(2.0, floor(segments));
-  // 角度を1セグメントに畳んで鏡像にする = 万華鏡
-  ang = mod(ang, seg);
-  ang = abs(ang - seg * 0.5);
-  vec2 q = vec2(cos(ang), sin(ang)) * r;
-  vec2 suv = clamp(q / vec2(aspect, 1.0) + 0.5, 0.0, 1.0);
+  // 楔の中へ畳んでから鏡像に折る (min(a, seg-a) が三角波 = 継ぎ目が鏡像になる)
+  a = mod(a, seg);
+  a = min(a, seg - a);
+  vec2 q = vec2(cos(a), sin(a)) * r;
+  q.x /= aspect;
+  vec2 suv = q + 0.5;
+  suv = vec2(mirror1(suv.x), mirror1(suv.y));
   vec4 k = IMG_NORM_PIXEL(inputImage, suv);
   gl_FragColor = vec4(mix(base.rgb, k.rgb, amount), base.a);
 }`;
