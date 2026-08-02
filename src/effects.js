@@ -1,181 +1,132 @@
 /**
  * VizMix - Effects Manager
- * v0.7.0
+ *
+ * 状態・setter・reset・シリアライズは **すべて effectRegistry から導出** する。
+ * エフェクトごとの手書きは無い（1本足すのに触るのは effectSources.js と
+ * effectRegistry.js の2ファイルだけ）。
  */
 
-// エフェクト状態
-export const effectsState = {
-  invert: { enabled: false },
-  grayscale: { enabled: false, amount: 0 },   // 0-100
-  sepia: { enabled: false, amount: 0 },       // 0-100
-  saturate: { amount: 100 },                   // 0-200 (100=neutral)
-  hueRotate: { amount: 0 },                    // 0-360 deg
-  blur: { amount: 0 },                         // 0-100
-  brightness: { amount: 0 },                   // -100 to +100
-  contrast: { amount: 0 },                     // -100 to +100
-  glitch: { amount: 0 },                       // 0-100
-  rgbShift: { amount: 0 },                     // 0-100
-  rgbMultiply: { amount: 0, color: '#FF0000' }, // 0-100, hex color
-};
+import {
+  EFFECTS, EFFECT_BY_ID, createEffectsState, buildActiveChain, isEffectActive,
+} from "./effectRegistry.js";
 
-// トグル（Invert）
-export function toggleInvert() {
-  effectsState.invert.enabled = !effectsState.invert.enabled;
-  return effectsState.invert.enabled;
+/** エフェクト状態。レジストリから生成 */
+export const effectsState = createEffectsState();
+
+function paramOf(effect, key) {
+  return effect.params.find((p) => p.stateKey === key) || null;
 }
 
-// トグル（Grayscale）- ONにすると amount を 100 に
-export function toggleGrayscale() {
-  effectsState.grayscale.enabled = !effectsState.grayscale.enabled;
-  if (effectsState.grayscale.enabled && effectsState.grayscale.amount === 0) {
-    effectsState.grayscale.amount = 100;
+function clampParam(param, value) {
+  if (!param) return value;
+  if (param.type === "color") return value;
+  const v = typeof value === "number" ? value : parseFloat(value);
+  if (Number.isNaN(v)) return param.default;
+  return Math.max(param.min, Math.min(param.max, v));
+}
+
+// ── 更新 ──────────────────────────────────────────────────────────────────────
+
+/**
+ * パラメータを UI 値で設定する（範囲はレジストリの min/max でクランプ）。
+ * @returns 設定後の値
+ */
+export function setEffectParam(effectId, key, value) {
+  const effect = EFFECT_BY_ID[effectId];
+  if (!effect) return undefined;
+  const st = effectsState[effectId];
+  if (key === "enabled") {
+    st.enabled = !!value;
+    // ON にしたとき量が既定値のまま（＝何も起きない）なら全開にする。
+    // UI のダブルクリック / パネルのトグル / toggleEffectEnabled() /
+    // MIDI が全部ここを通るので、経路によって挙動が食い違わない。
+    if (st.enabled && effect.gate && effect.type !== "toggle") {
+      const g = effect.gate;
+      if (st[g.stateKey] === g.default) st[g.stateKey] = g.max;
+    }
+    return st.enabled;
   }
-  return effectsState.grayscale.enabled;
+  const param = paramOf(effect, key);
+  if (!param) return undefined;
+  st[key] = clampParam(param, value);
+  // 値を動かしたら ON にする。OFF のままドラッグしても何も起きない、を避ける。
+  // (toggle-amount は従来どおり enabled を明示操作する仕様なので対象外)
+  if (effect.type === "continuous") st.enabled = true;
+  return st[key];
 }
 
-// トグル（Sepia）- ONにすると amount を 100 に
-export function toggleSepia() {
-  effectsState.sepia.enabled = !effectsState.sepia.enabled;
-  if (effectsState.sepia.enabled && effectsState.sepia.amount === 0) {
-    effectsState.sepia.amount = 100;
-  }
-  return effectsState.sepia.enabled;
+/**
+ * ON/OFF を反転する。
+ * toggle-amount で「量が既定値のまま」なら全開にする（従来の
+ * toggleGrayscale / toggleSepia が amount 0 → 100 にしていた挙動）。
+ */
+/**
+ * ON/OFF を反転する（全23本共通。マニュアル記載の「ダブルクリックで ON/OFF切替」）。
+ *
+ * OFF にしても値は保持する → 再び ON にすると同じ効き具合で戻る。
+ * ON にしたとき量が既定値のまま（=何も起きない）なら全開にする。
+ * これは従来 Grayscale / Sepia が 0 → 100 にしていた挙動を全型へ広げたもの。
+ */
+export function toggleEffectEnabled(effectId) {
+  const effect = EFFECT_BY_ID[effectId];
+  if (!effect) return false;
+  return setEffectParam(effectId, "enabled", !effectsState[effectId].enabled);
 }
 
-// スライダー設定
-export function setGrayscaleAmount(value) {
-  effectsState.grayscale.amount = Math.max(0, Math.min(100, value));
-  return effectsState.grayscale.amount;
-}
-
-export function setSepiaAmount(value) {
-  effectsState.sepia.amount = Math.max(0, Math.min(100, value));
-  return effectsState.sepia.amount;
-}
-
-export function setBlurAmount(value) {
-  effectsState.blur.amount = Math.max(0, Math.min(100, value));
-  return effectsState.blur.amount;
-}
-
-export function setBrightnessAmount(value) {
-  effectsState.brightness.amount = Math.max(-100, Math.min(100, value));
-  return effectsState.brightness.amount;
-}
-
-export function setContrastAmount(value) {
-  effectsState.contrast.amount = Math.max(-100, Math.min(100, value));
-  return effectsState.contrast.amount;
-}
-
-export function setGlitchAmount(value) {
-  effectsState.glitch.amount = Math.max(0, Math.min(100, value));
-  return effectsState.glitch.amount;
-}
-
-export function setRgbShiftAmount(value) {
-  effectsState.rgbShift.amount = Math.max(0, Math.min(100, value));
-  return effectsState.rgbShift.amount;
-}
-
-export function setRgbMultiplyAmount(value) {
-  effectsState.rgbMultiply.amount = Math.max(0, Math.min(100, value));
-  return effectsState.rgbMultiply.amount;
-}
-
-export function setRgbMultiplyColor(color) {
-  effectsState.rgbMultiply.color = color;
-  return effectsState.rgbMultiply.color;
-}
-
-// リセット
-export function resetEffect(effectName) {
-  switch (effectName) {
-    case 'invert':
-      effectsState.invert.enabled = false;
-      break;
-    case 'grayscale':
-      effectsState.grayscale.enabled = false;
-      effectsState.grayscale.amount = 0;
-      break;
-    case 'sepia':
-      effectsState.sepia.enabled = false;
-      effectsState.sepia.amount = 0;
-      break;
-    case 'saturate':
-      effectsState.saturate.amount = 100;
-      break;
-    case 'hueRotate':
-      effectsState.hueRotate.amount = 0;
-      break;
-    case 'blur':
-      effectsState.blur.amount = 0;
-      break;
-    case 'brightness':
-      effectsState.brightness.amount = 0;
-      break;
-    case 'contrast':
-      effectsState.contrast.amount = 0;
-      break;
-    case 'glitch':
-      effectsState.glitch.amount = 0;
-      break;
-    case 'rgbShift':
-      effectsState.rgbShift.amount = 0;
-      break;
-    case 'rgbMultiply':
-      effectsState.rgbMultiply.amount = 0;
-      effectsState.rgbMultiply.color = '#FF0000';
-      break;
+export function resetEffect(effectId) {
+  const effect = EFFECT_BY_ID[effectId];
+  if (!effect) return;
+  const st = effectsState[effectId];
+  st.enabled = false;
+  if (effect.type !== "toggle") {
+    for (const p of effect.params) st[p.stateKey] = p.default;
   }
 }
 
 export function resetAllEffects() {
-  effectsState.invert.enabled = false;
-  effectsState.grayscale.enabled = false;
-  effectsState.grayscale.amount = 0;
-  effectsState.sepia.enabled = false;
-  effectsState.sepia.amount = 0;
-  effectsState.saturate.amount = 100;
-  effectsState.hueRotate.amount = 0;
-  effectsState.blur.amount = 0;
-  effectsState.brightness.amount = 0;
-  effectsState.contrast.amount = 0;
-  effectsState.glitch.amount = 0;
-  effectsState.rgbShift.amount = 0;
-  effectsState.rgbMultiply.amount = 0;
-  effectsState.rgbMultiply.color = '#FF0000';
+  for (const e of EFFECTS) resetEffect(e.id);
 }
 
-// エフェクトパラメータをシェーダー用に取得
-export function getEffectParams() {
-  return {
-    invert: effectsState.invert.enabled ? 1.0 : 0.0,
-    grayscale: effectsState.grayscale.enabled ? effectsState.grayscale.amount / 100 : 0.0,
-    sepia: effectsState.sepia.enabled ? effectsState.sepia.amount / 100 : 0.0,
-    saturate: effectsState.saturate.amount / 100,   // 0..2 (1=neutral)
-    hueRotate: effectsState.hueRotate.amount,        // degrees
-    blur: effectsState.blur.amount / 100,
-    brightness: effectsState.brightness.amount / 100,
-    contrast: effectsState.contrast.amount / 100,
-    glitch: effectsState.glitch.amount / 100,
-    rgbShift: effectsState.rgbShift.amount / 100,
-    rgbMultiply: effectsState.rgbMultiply.amount / 100,
-    rgbMultiplyColor: effectsState.rgbMultiply.color,
-  };
+// ── 読み出し ──────────────────────────────────────────────────────────────────
+
+/** 現在の状態から ISF チェーンを組む（レジストリ順・中立値は積まない） */
+export function getActiveChain() {
+  return buildActiveChain(effectsState);
 }
 
-// BroadcastChannel用にシリアライズ
+/** そのエフェクトが今効いているか（一覧のインジケーター用） */
+export function isActive(effectId) {
+  const effect = EFFECT_BY_ID[effectId];
+  return effect ? isEffectActive(effect, effectsState[effectId]) : false;
+}
+
+// ── 同期 (BroadcastChannel) ───────────────────────────────────────────────────
+
 export function serializeEffectsState() {
-  return { ...effectsState };
+  return JSON.parse(JSON.stringify(effectsState));
 }
 
-// Output Window用にデシリアライズ
+/**
+ * 出力ウィンドウ側での復元。
+ * 未知のキー/エフェクトは無視し、既知のものだけ取り込む（前方・後方互換）。
+ */
 export function deserializeEffectsState(data) {
-  if (data.invert !== undefined) effectsState.invert = data.invert;
-  if (data.grayscale !== undefined) effectsState.grayscale = data.grayscale;
-  if (data.sepia !== undefined) effectsState.sepia = data.sepia;
-  if (data.blur !== undefined) effectsState.blur = data.blur;
-  if (data.brightness !== undefined) effectsState.brightness = data.brightness;
-  if (data.contrast !== undefined) effectsState.contrast = data.contrast;
+  if (!data) return;
+  for (const e of EFFECTS) {
+    const incoming = data[e.id];
+    if (!incoming || typeof incoming !== "object") continue;
+    const st = effectsState[e.id];
+    if (incoming.enabled !== undefined) {
+      st.enabled = !!incoming.enabled;
+    } else if (e.type === "continuous" && e.gate) {
+      // enabled を持たない旧ペイロード: 量が既定値から動いていれば ON とみなす
+      // (旧仕様は「量が中立でなければ効く」だったので、それを再現する)
+      const v = incoming[e.gate.stateKey];
+      st.enabled = v !== undefined && v !== e.gate.default;
+    }
+    for (const p of e.params) {
+      if (incoming[p.stateKey] === undefined) continue;
+      st[p.stateKey] = clampParam(p, incoming[p.stateKey]);
+    }
+  }
 }

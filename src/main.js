@@ -30,25 +30,15 @@ import {
 } from "./mixer.js";
 import {
   effectsState,
-  toggleInvert,
-  toggleGrayscale,
-  toggleSepia,
-  setGrayscaleAmount,
-  setSepiaAmount,
-  setBlurAmount,
-  setBrightnessAmount,
-  setContrastAmount,
-  setGlitchAmount,
-  setRgbShiftAmount,
-  setRgbMultiplyAmount,
-  setRgbMultiplyColor,
+  setEffectParam,
+  toggleEffectEnabled,
   resetEffect,
   resetAllEffects,
-  getEffectParams,
+  getActiveChain,
 } from "./effects.js";
 import { videoManager, setVideoSource, setShaderSource, setShaderDefaults, setShaderRawSource, getShaderRawSource, getSourceType, getShaderVersion } from "./videoManager.js";
 import { MasterEffectChain } from "./masterEffect.js";
-import { EFFECT_ISF, buildActiveChain } from "./effectLibrary.js";
+import { EFFECT_ISF, EFFECTS } from "./effectRegistry.js";
 import { runBenchmark, generateStaticTexture } from "./benchmark.js";
 import { ShaderPreviewRenderer } from "./shaderPreview.js";
 import {
@@ -72,7 +62,7 @@ import {
 } from "./storage.js";
 import { initKeyboard, getShortcutList } from "./keyboard.js";
 import { initMidi, getMidiDevices, toggleLearnMode, clearAllLearnMappings, registerLearnableTarget } from "./midi.js";
-import { initEffectsUI as initEffectsPanelUI, syncEffectsUI, handleEffectShortcut, hideEffectParams } from './effectsUI.js';
+import { initEffectsUI as initEffectsPanelUI, buildEffectsList, syncEffectsUI, handleEffectShortcut, hideEffectParams } from './effectsUI.js';
 import { initMediaBrowsers } from './mediaBrowser.js';
 import { initWebcam, getWebcamManager, WebcamManager } from './webcam.js';
 
@@ -229,12 +219,8 @@ async function init() {
   await initMidiController();
   // Effects Panel UI 初期化 (Resolume-style)
   initEffectsPanelUI(effectsState, (effectKey, property, value) => {
-    // エフェクト変更コールバック
-    if (property === 'enabled') {
-      effectsState[effectKey].enabled = value;
-    } else {
-      effectsState[effectKey][property] = value;
-    }
+    // エフェクト変更コールバック（範囲クランプはレジストリ定義に従う）
+    setEffectParam(effectKey, property, value);
 
     // Output Windowに同期
     broadcastEffectsState();
@@ -311,6 +297,10 @@ async function handleMessage(data) {
 }
 
 function initUI() {
+  // エフェクト一覧をレジストリから生成する。MIDI の learnable target が
+  // [data-effect=...] を querySelector で拾うので、それより必ず先に作る。
+  buildEffectsList();
+
   // ── 出力解像度セレクト ────────────────────────────────────────────────────
   const resolutionSelect = document.getElementById('outputResolution');
   if (resolutionSelect) {
@@ -889,13 +879,52 @@ function initKeyboardShortcuts() {
       }
     },
 
-    fxInvert: () => handleEffectShortcut('F1'),
-    fxGrayscale: () => handleEffectShortcut('F2'),
-    fxSepia: () => handleEffectShortcut('F3'),
-    fxBlurReset: () => handleEffectShortcut('F4'),
-    fxBrightnessReset: () => handleEffectShortcut('F5'),
-    fxContrastReset: () => handleEffectShortcut('F6'),
+    // エフェクトのショートカットは keyboard.js が単一アクションに寄せて
+    // キー名を渡してくる。割当はレジストリの shortcut が唯一の真実。
+    effectShortcut: (key) => handleEffectShortcut(key),
   });
+}
+
+// ── エフェクトの MIDI / Learn 配線（レジストリから生成）────────────────────────
+// 従来はエフェクトごとに fxInvert / fxBlur … を手書きしていた。レジストリを回して
+// 同じ命名規則 (fx + Id) のハンドラを作るので、1本足しても配線漏れが起きない。
+
+function midiActionName(id) {
+  return 'fx' + id.charAt(0).toUpperCase() + id.slice(1);
+}
+
+function buildEffectMidiHandlers() {
+  const handlers = {};
+  for (const e of EFFECTS) {
+    const name = midiActionName(e.id);
+    if (e.type === 'toggle' || e.type === 'toggle-amount') {
+      handlers[name] = () => {
+        toggleEffectEnabled(e.id);
+        broadcastEffectsState();
+        syncEffectsUI(effectsState);
+      };
+    } else if (e.gate) {
+      handlers[name] = (value) => {
+        setEffectParam(e.id, e.gate.stateKey, value);
+        broadcastEffectsState();
+        syncEffectsUI(effectsState);
+      };
+    }
+  }
+  return handlers;
+}
+
+function registerEffectLearnableTargets() {
+  for (const e of EFFECTS) {
+    const el = document.querySelector(`[data-effect="${e.id}"]`);
+    if (!el) continue;
+    const name = midiActionName(e.id);
+    if (e.type === 'toggle' || e.type === 'toggle-amount') {
+      registerLearnableTarget(name, el, 'button');
+    } else if (e.gate) {
+      registerLearnableTarget(name, el, 'slider', [e.gate.min, e.gate.max]);
+    }
+  }
 }
 
 // エフェクトは GLSL ISF チェーン (masterEffect) で canvas 画素に焼き込まれるため、
@@ -1007,51 +1036,9 @@ async function initMidiController() {
       if (!flashEnabled) flashOpacity = 0;
     },
 
-    fxInvert: () => {
-      toggleInvert();
-      broadcastEffectsState();
-      syncEffectsUI(effectsState);
-    },
-    fxGrayscale: () => {
-      toggleGrayscale();
-      broadcastEffectsState();
-      syncEffectsUI(effectsState);
-    },
-    fxSepia: () => {
-      toggleSepia();
-      broadcastEffectsState();
-      syncEffectsUI(effectsState);
-    },
-    fxBlur: (value) => {
-      setBlurAmount(value);
-      broadcastEffectsState();
-      syncEffectsUI(effectsState);
-    },
-    fxBrightness: (value) => {
-      setBrightnessAmount(value);
-      broadcastEffectsState();
-      syncEffectsUI(effectsState);
-    },
-    fxContrast: (value) => {
-      setContrastAmount(value);
-      broadcastEffectsState();
-      syncEffectsUI(effectsState);
-    },
-    fxGlitch: (value) => {
-      setGlitchAmount(value);
-      broadcastEffectsState();
-      syncEffectsUI(effectsState);
-    },
-    fxRgbShift: (value) => {
-      setRgbShiftAmount(value);
-      broadcastEffectsState();
-      syncEffectsUI(effectsState);
-    },
-    fxRgbMultiply: (value) => {
-      setRgbMultiplyAmount(value);
-      broadcastEffectsState();
-      syncEffectsUI(effectsState);
-    },
+    // エフェクトの MIDI ハンドラはレジストリから生成する。
+    // toggle 系は fx<Id> で ON/OFF、量を持つものは fx<Id> に UI値が渡る。
+    ...buildEffectMidiHandlers(),
   });
 
   if (success) {
@@ -1074,15 +1061,7 @@ async function initMidiController() {
   registerLearnableTarget('crossfade', document.getElementById('crossfader'), 'slider', [0, 100]);
   registerLearnableTarget('dimmerA', document.getElementById('dimmerA'), 'slider', [0, 100]);
   registerLearnableTarget('dimmerB', document.getElementById('dimmerB'), 'slider', [0, 100]);
-  registerLearnableTarget('fxBlur', document.querySelector('[data-effect="blur"]'), 'slider', [0, 100]);
-  registerLearnableTarget('fxBrightness', document.querySelector('[data-effect="brightness"]'), 'slider', [-100, 100]);
-  registerLearnableTarget('fxContrast', document.querySelector('[data-effect="contrast"]'), 'slider', [-100, 100]);
-  registerLearnableTarget('fxGlitch', document.querySelector('[data-effect="glitch"]'), 'slider', [0, 100]);
-  registerLearnableTarget('fxRgbShift', document.querySelector('[data-effect="rgbShift"]'), 'slider', [0, 100]);
-  registerLearnableTarget('fxRgbMultiply', document.querySelector('[data-effect="rgbMultiply"]'), 'slider', [0, 100]);
-  registerLearnableTarget('fxInvert', document.querySelector('[data-effect="invert"]'), 'button');
-  registerLearnableTarget('fxGrayscale', document.querySelector('[data-effect="grayscale"]'), 'button');
-  registerLearnableTarget('fxSepia', document.querySelector('[data-effect="sepia"]'), 'button');
+  registerEffectLearnableTargets();
   registerLearnableTarget('flashToggle', document.getElementById('flashToggle'), 'button');
   registerLearnableTarget('autoSwitchToggle', document.getElementById('autoSwitch'), 'button');
 
@@ -1869,7 +1848,7 @@ async function initPlayCanvas() {
   app.scene.on("postrender:layer", function (cam, layer, transparent) {
     if (!masterEffect) return;
     if (cam === camera.camera && layer === worldLayer && transparent) {
-      const chain = benchmarkOverrideChain || buildActiveChain(getEffectParams());
+      const chain = benchmarkOverrideChain || getActiveChain();
       masterEffect.apply(chain, performance.now() / 1000);
     }
   });
@@ -1886,26 +1865,30 @@ async function initPlayCanvas() {
 // ── 自動ベンチマーク (?benchmark=1) ───────────────────────────────────────────
 function applyBenchmarkEffect(name) {
   resetAllEffects();
+  // state を直接書くと enabled が立たず効かないので、必ず setter を通す。
+  const set = (id, key, v) => setEffectParam(id, key, v);
+  const on = (id) => toggleEffectEnabled(id);
   switch (name) {
     case "none": break;
-    case "brightness": effectsState.brightness.amount = 60; break;
-    case "contrast": effectsState.contrast.amount = 50; break;
-    case "saturate": effectsState.saturate.amount = 180; break;
-    case "hueRotate": effectsState.hueRotate.amount = 120; break;
-    case "grayscale": effectsState.grayscale.enabled = true; effectsState.grayscale.amount = 100; break;
-    case "sepia": effectsState.sepia.enabled = true; effectsState.sepia.amount = 100; break;
-    case "invert": effectsState.invert.enabled = true; break;
-    case "blur": effectsState.blur.amount = 50; break;
-    case "rgbShift": effectsState.rgbShift.amount = 60; break;
-    case "glitch": effectsState.glitch.amount = 50; break;
-    case "rgbMultiply": effectsState.rgbMultiply.amount = 70; break;
+    case "brightness": set("brightness", "amount", 60); break;
+    case "contrast": set("contrast", "amount", 50); break;
+    case "saturate": set("saturate", "amount", 180); break;
+    case "hueRotate": set("hueRotate", "amount", 120); break;
+    case "grayscale": on("grayscale"); set("grayscale", "amount", 100); break;
+    case "sepia": on("sepia"); set("sepia", "amount", 100); break;
+    case "invert": on("invert"); break;
+    case "blur": set("blur", "amount", 50); break;
+    case "rgbShift": set("rgbShift", "amount", 60); break;
+    case "glitch": set("glitch", "amount", 50); break;
+    case "rgbMultiply": set("rgbMultiply", "amount", 70); break;
     case "all":
-      effectsState.brightness.amount = 30; effectsState.contrast.amount = 30;
-      effectsState.saturate.amount = 160; effectsState.hueRotate.amount = 60;
-      effectsState.blur.amount = 40; effectsState.rgbShift.amount = 50;
-      effectsState.glitch.amount = 40; break;
+      set("brightness", "amount", 30); set("contrast", "amount", 30);
+      set("saturate", "amount", 160); set("hueRotate", "amount", 60);
+      set("blur", "amount", 40); set("rgbShift", "amount", 50);
+      set("glitch", "amount", 40); break;
   }
 }
+
 
 async function setBenchmarkMaterial(type) {
   // チャンネルA のみを評価対象にする
